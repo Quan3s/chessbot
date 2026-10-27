@@ -80,6 +80,12 @@ public final class StockfishCatalog {
         }
     }
 
+    public interface DownloadListener {
+        void onProgress(long downloadedBytes, long totalBytes);
+
+        void onStatus(String status);
+    }
+
     public static List<Release> fetchReleases() throws IOException, JSONException {
         String abi = Build.SUPPORTED_ABIS.length == 0 ? "" : Build.SUPPORTED_ABIS[0];
         boolean arm64 = abi.startsWith("arm64");
@@ -171,7 +177,8 @@ public final class StockfishCatalog {
     }
 
     /** Downloads, verifies, extracts, and UCI-checks an official release into app-private storage. */
-    public static void downloadAndInstall(Context context, Release release) throws IOException {
+    public static void downloadAndInstall(Context context, Release release,
+                                          DownloadListener listener) throws IOException {
         if (!isSafeTag(release.tag)
                 || !isOfficialDownloadUrl(release.downloadUrl, release.tag, release.assetName)
                 || !isSupportedArchive(release.assetName)
@@ -193,11 +200,13 @@ public final class StockfishCatalog {
         deleteTree(archive);
         deleteTree(staging);
         try {
-            downloadArchive(release, archive);
+            downloadArchive(release, archive, listener);
+            listener.onStatus("Đang giải nén và chuẩn bị engine…");
             if (!staging.mkdirs()) {
                 throw new IOException("Không tạo được thư mục cài Stockfish");
             }
             extractArchive(archive, staging, release.assetName.endsWith(".gz"));
+            listener.onStatus("Đang kiểm tra binary Stockfish…");
             File binary = findEngineBinary(staging);
             if (binary == null || binary.length() < 1024 * 1024) {
                 throw new IOException("Gói tải về không có bộ máy Stockfish hợp lệ");
@@ -250,7 +259,8 @@ public final class StockfishCatalog {
         return null;
     }
 
-    private static void downloadArchive(Release release, File destination) throws IOException {
+    private static void downloadArchive(Release release, File destination,
+                                        DownloadListener listener) throws IOException {
         URL url = new URL(release.downloadUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setConnectTimeout(20000);
@@ -260,6 +270,7 @@ public final class StockfishCatalog {
         connection.setRequestProperty("User-Agent", "ChessBotAssist");
         MessageDigest digest = sha256();
         try {
+            listener.onStatus("Đang kết nối tới máy chủ Stockfish…");
             int status = connection.getResponseCode();
             String finalHost = connection.getURL().getHost();
             if (status != HttpURLConnection.HTTP_OK
@@ -273,6 +284,8 @@ public final class StockfishCatalog {
                 byte[] buffer = new byte[32768];
                 int count;
                 long total = 0;
+                long lastProgressBytes = 0;
+                long lastProgressTime = 0;
                 while ((count = input.read(buffer)) != -1) {
                     total += count;
                     if (total > release.size || total > MAX_ARCHIVE_BYTES) {
@@ -280,11 +293,20 @@ public final class StockfishCatalog {
                     }
                     digest.update(buffer, 0, count);
                     output.write(buffer, 0, count);
+                    long now = System.currentTimeMillis();
+                    if (total - lastProgressBytes >= 512 * 1024
+                            || now - lastProgressTime >= 300
+                            || total == release.size) {
+                        listener.onProgress(total, release.size);
+                        lastProgressBytes = total;
+                        lastProgressTime = now;
+                    }
                 }
                 if (total != release.size) {
                     throw new IOException("Gói tải về chưa đầy đủ");
                 }
             }
+            listener.onStatus("Đang xác minh SHA-256…");
             if (!toHex(digest.digest()).equals(release.sha256)) {
                 throw new IOException("SHA-256 không khớp; đã hủy cài đặt Stockfish");
             }

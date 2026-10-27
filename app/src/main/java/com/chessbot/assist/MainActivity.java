@@ -316,10 +316,21 @@ public class MainActivity extends Activity {
         }
 
         btnDownloadEngine.setEnabled(false);
-        ProgressBar progress = new ProgressBar(this);
+        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+        TextView progressLabel = new TextView(this);
+        progressLabel.setText("Đang chuẩn bị tải…");
+        progressLabel.setTextColor(0xFFB8C0CF);
+        progressLabel.setTextSize(13);
         LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
         container.setPadding(48, 32, 48, 32);
-        container.addView(progress);
+        container.addView(progressLabel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(12));
+        progressParams.topMargin = dp(12);
+        container.addView(progress, progressParams);
         long sizeMb = (release.size + 1024 * 1024 - 1) / (1024 * 1024);
         AlertDialog loading = new AlertDialog.Builder(this)
                 .setTitle("Đang tải " + release.label)
@@ -329,7 +340,34 @@ public class MainActivity extends Activity {
                 .show();
         engineExecutor.execute(() -> {
             try {
-                StockfishCatalog.downloadAndInstall(this, release);
+                StockfishCatalog.downloadAndInstall(this, release,
+                        new StockfishCatalog.DownloadListener() {
+                            @Override
+                            public void onProgress(long downloadedBytes, long totalBytes) {
+                                int percent = (int) (downloadedBytes * 100 / totalBytes);
+                                double downloadedMb = downloadedBytes / (1024.0 * 1024.0);
+                                double totalMb = totalBytes / (1024.0 * 1024.0);
+                                runOnUiThread(() -> {
+                                    if (!isFinishing() && !isDestroyed()) {
+                                        progress.setIndeterminate(false);
+                                        progress.setProgress(percent);
+                                        progressLabel.setText(String.format(java.util.Locale.ROOT,
+                                                "Đã tải %.1f / %.1f MB (%d%%)",
+                                                downloadedMb, totalMb, percent));
+                                    }
+                                });
+                            }
+
+                            @Override
+                            public void onStatus(String status) {
+                                runOnUiThread(() -> {
+                                    if (!isFinishing() && !isDestroyed()) {
+                                        progress.setIndeterminate(true);
+                                        progressLabel.setText(status);
+                                    }
+                                });
+                            }
+                        });
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) {
                         return;
@@ -357,6 +395,10 @@ public class MainActivity extends Activity {
         String message = e.getMessage();
         return message == null || message.trim().isEmpty()
                 ? e.getClass().getSimpleName() : message;
+    }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void setupSeekBars() {

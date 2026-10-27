@@ -8,7 +8,7 @@ PLATFORM="$SDK/platforms/android-35/android.jar"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="$ROOT/build"
 LIB="$ROOT/libs/chesslib-1.3.3.jar"
-NAME="ChessBot-Assist-v1.5.1"
+NAME="ChessBot-Assist-v1.5.2"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/gen" "$OUT/classes" "$OUT/dex"
@@ -22,8 +22,8 @@ echo "[1/6] resources"
     --java "$OUT/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 7 \
-    --version-name "1.5.1" \
+    --version-code 8 \
+    --version-name "1.5.2" \
     --auto-add-overlay \
     "$OUT/res.zip"
 
