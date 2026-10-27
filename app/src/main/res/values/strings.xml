@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ChessBot Assist</string>
+    <string name="accessibility_label">ChessBot Assist</string>
+    <string name="accessibility_desc">Cho phép ChessBot thực hiện thao tác chạm / kéo để đi quân trong ứng dụng cờ vua khác. Ứng dụng không đọc nội dung màn hình qua trợ năng; việc nhận diện bàn cờ dùng ảnh chụp màn hình do bạn cấp quyền.</string>
+</resources>
