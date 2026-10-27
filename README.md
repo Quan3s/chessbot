@@ -8,16 +8,16 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.apk`.
-SHA-256: `1a0e41a3e56c16375582f598f3c0ff377b13f6cf123e95019daf8394c6e76f04`
+APK sau khi build: `build/ChessBot-Assist-v1.5.1.apk`.
+SHA-256: `ca1efc6feb2182163cb0927bcc2f710a60fcd0957ac238a531b7a31bfe913e09`
 
-**Bản 1.5:** thêm tải phiên bản Android từ GitHub chính thức của Stockfish, kiểm tra SHA-256 trước khi cài và cho chọn engine đã tải; cấu hình nâng cao chọn số nhân CPU và RAM Hash, hoặc để tự động. Giữ nguyên nhận diện quân và các cài đặt ván cờ; mặc định **5000 ms/nước**, kéo tối đa **10000 ms**, nút **MAX** đặt Skill 20 + 10000 ms.
+**Bản 1.5.1:** sửa nhận diện binary trong gói Stockfish tải về để không nhầm file tài liệu với engine. Bản 1.5 thêm tải phiên bản Android chính thức, kiểm tra SHA-256 trước khi cài và chọn engine đã tải; cấu hình nâng cao số nhân CPU và RAM Hash. Giữ nguyên tính năng và cài đặt cũ.
 
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.1.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
@@ -171,7 +171,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.apk
+# -> build/ChessBot-Assist-v1.5.1.apk
 ```
 
 Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` → `zipalign` → `apksigner`. Không dùng Gradle nên build được trên máy ít RAM.

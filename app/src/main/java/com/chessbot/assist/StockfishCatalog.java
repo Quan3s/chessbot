@@ -490,8 +490,8 @@ public final class StockfishCatalog {
 
     private static boolean isEngineName(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
-        return lower.equals("stockfish") || (lower.startsWith("stockfish-")
-                && !lower.endsWith(".nnue") && !lower.endsWith(".txt"));
+        return lower.equals("stockfish")
+                || (lower.startsWith("stockfish-") && lower.indexOf('.') < 0);
     }
 
     private static boolean isSupportedArchive(String name) {
