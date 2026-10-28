@@ -22,9 +22,9 @@ public final class BoardReader {
     public static int DEV_THRESHOLD = 26;
     /** Fraction of the inner square that must differ to call it occupied. */
     public static float FILL_THRESHOLD = 0.10f;
-    private static final int[] START_DEV_THRESHOLDS = {42, 36, 32, 28, 26, 22, 18, 14};
+    private static final int[] START_DEV_THRESHOLDS = {26, 26, 36, 42, 56, 56, 68, 72, 82};
     private static final float[] START_FILL_THRESHOLDS = {
-            0.24f, 0.20f, 0.16f, 0.13f, 0.10f, 0.08f, 0.06f, 0.045f
+            0.10f, 0.20f, 0.14f, 0.10f, 0.10f, 0.20f, 0.14f, 0.24f, 0.30f
     };
     /** Ring used to sample the square background (fractions of the square). */
     private static final float RING_IN = 0.06f;

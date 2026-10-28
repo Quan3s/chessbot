@@ -372,8 +372,9 @@ public final class GameController {
                 + " ô trống nhận nhầm là có quân, " + startRead.missedPieces
                 + " quân bị bỏ sót; đúng " + (64 - mismatch) + "/64 ô");
         if (!startRead.isValid()) {
-            return "Không nhận diện rõ bàn cờ (" + occ + "/32 quân, "
-                    + (64 - mismatch) + "/64 ô khớp). Hãy mở ván mới, căn khung sát mép "
+            return "Không nhận diện rõ bàn cờ: nhầm " + startRead.falsePositives
+                    + " ô trống thành có quân, bỏ sót " + startRead.missedPieces
+                    + " quân; đúng " + (64 - mismatch) + "/64 ô. Hãy căn khung sát mép "
                     + "bàn cờ và bảo đảm nút nổi không che quân.";
         }
 
