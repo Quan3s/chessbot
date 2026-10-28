@@ -128,6 +128,9 @@ public final class GameController {
             long lastChange = 0;
             int stable = 0;
             int unknown = 0;
+            Move previousObservedMove = null;
+            int observedMoveRepeats = 0;
+            long observedMoveSince = 0;
             int retried = 0;
             boolean tapPending = false;
             long tapAt = 0;
@@ -140,7 +143,8 @@ public final class GameController {
                     continue;
                 }
                 BoardReader.Result res = BoardReader.read(frame.pixels, frame.width, frame.height,
-                        rect[0], rect[1], rect[2], rect[3]);
+                        rect[0], rect[1], rect[2], rect[3],
+                        Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
                 int[] grid = res.boardOccupancy(whiteAtBottom);
 
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
@@ -159,6 +163,8 @@ public final class GameController {
                 boolean synced = Arrays.equals(grid, internal);
                 if (synced) {
                     baseline = res;
+                    previousObservedMove = null;
+                    observedMoveRepeats = 0;
                 }
 
                 if (!synced) {
@@ -174,8 +180,47 @@ public final class GameController {
                     if (tapPending && pending != null && matchesMove(grid, pending)) {
                         move = pending;
                     } else {
-                        Move occupancyMove = findMove(grid, res, baseline);
-                        move = occupancyMove;
+                        Move occupancyMove = findMoveWithThresholdFallback(
+                                frame, grid, res, baseline);
+                        if (occupancyMove != null) {
+                            if (occupancyMove.equals(previousObservedMove)) {
+                                observedMoveRepeats++;
+                            } else {
+                                previousObservedMove = occupancyMove;
+                                observedMoveRepeats = 1;
+                                observedMoveSince = SystemClock.elapsedRealtime();
+                            }
+                            long candidateDuration =
+                                    SystemClock.elapsedRealtime() - observedMoveSince;
+                            if (observedMoveRepeats >= 2 && candidateDuration >= 180) {
+                                move = occupancyMove;
+                            } else {
+                                unknown++;
+                                if (unknown == 1) {
+                                    EventLog.add("Bàn cờ đã đổi — đang xác nhận nước đi…");
+                                }
+                                if (unknown > 45) {
+                                    finish("Không nhận ra nước đi. Hãy kiểm tra vùng bàn cờ / mở ván mới.", true);
+                                    return;
+                                }
+                                sleep(230);
+                                continue;
+                            }
+                        } else {
+                            previousObservedMove = null;
+                            observedMoveRepeats = 0;
+                            unknown++;
+                            if (unknown == 1) {
+                                EventLog.add("Bàn cờ đã đổi nhưng chưa khớp nước hợp lệ — đang chờ…");
+                                EventLog.add("Bàn cờ đọc được:\n" + res.debugRows());
+                            }
+                            if (unknown > 45) {
+                                finish("Không nhận ra nước đi. Hãy kiểm tra vùng bàn cờ / mở ván mới.", true);
+                                return;
+                            }
+                            sleep(230);
+                            continue;
+                        }
                         if (typedReady) {
                             // Piece types are extra evidence, never a
                             // replacement for the occupancy match. They are
@@ -183,7 +228,7 @@ public final class GameController {
                             PieceRecognizer.Recognized rec = recognizer.classifyBoard(
                                     frame.pixels, frame.width, frame.height, res, whiteAtBottom);
                             Move typedMove = chooseTypedMove(grid, rec);
-                            if (typedMove != null && !typedMove.equals(occupancyMove)) {
+                            if (typedMove != null && !typedMove.equals(move)) {
                                 EventLog.add("Nhận diện quân xác nhận: " + uci(typedMove)
                                         + " · tin cậy "
                                         + Math.round(PieceRecognizer.averageConfidence(rec) * 100)
@@ -192,31 +237,21 @@ public final class GameController {
                             }
                         }
                     }
-                    if (move != null) {
-                        Side mover = board.getSideToMove();
-                        board.doMove(move);
-                        tapPending = false;
-                        pending = null;
-                        unknown = 0;
-                        retried = 0;
-                        EventLog.add((mover == botSide ? "Bot" : "Đối thủ") + ": " + uci(move));
-                        listener.onStatus((mover == botSide ? "Bot" : "Đối thủ") + " đi " + uci(move));
-                        if (isGameOver()) {
-                            finish("Ván đã kết thúc", false);
-                            return;
-                        }
-                        sleep(160);
-                        continue;
-                    }
-                    unknown++;
-                    if (unknown == 1) {
-                        EventLog.add("Bàn cờ đã đổi nhưng chưa khớp nước hợp lệ — đang chờ…");
-                    }
-                    if (unknown > 45) {
-                        finish("Không nhận ra nước đi. Hãy kiểm tra vùng bàn cờ / mở ván mới.", true);
+                    Side mover = board.getSideToMove();
+                    board.doMove(move);
+                    tapPending = false;
+                    pending = null;
+                    unknown = 0;
+                    previousObservedMove = null;
+                    observedMoveRepeats = 0;
+                    retried = 0;
+                    EventLog.add((mover == botSide ? "Bot" : "Đối thủ") + ": " + uci(move));
+                    listener.onStatus((mover == botSide ? "Bot" : "Đối thủ") + " đi " + uci(move));
+                    if (isGameOver()) {
+                        finish("Ván đã kết thúc", false);
                         return;
                     }
-                    sleep(230);
+                    sleep(160);
                     continue;
                 }
 
@@ -318,20 +353,16 @@ public final class GameController {
     }
 
     private String initialize() {
-        ScreenCapture.Frame frame = null;
-        for (int i = 0; i < 8; i++) {
-            frame = capture.grab();
-            if (frame != null) {
-                break;
-            }
-            sleep(250);
-        }
-        if (frame == null) {
+        StartFrame startFrame = captureStartingPosition();
+        if (startFrame == null) {
             return "Không chụp được màn hình.";
         }
-        BoardReader.Result res = BoardReader.read(frame.pixels, frame.width, frame.height,
-                rect[0], rect[1], rect[2], rect[3]);
+        ScreenCapture.Frame frame = startFrame.frame;
+        BoardReader.StartRead startRead = startFrame.read;
+        BoardReader.Result res = startRead.result;
         EventLog.add("Nhận diện sơ bộ:\n" + res.debugRows());
+        EventLog.add("Ngưỡng nhận diện: chênh lệch " + startRead.devThreshold
+                + " · diện tích " + Math.round(startRead.fillThreshold * 100) + "%");
 
         int orient = Prefs.getOrientation(ctx);
         if (orient == Prefs.ORIENT_WHITE_BOTTOM) {
@@ -343,39 +374,88 @@ public final class GameController {
             int botN = res.occupiedInRows(6, 7);
             float topL = res.avgPieceHigh(0, 1);
             float botL = res.avgPieceHigh(6, 7);
-            EventLog.add("Hướng bàn cờ: trên " + topN + " quân (lum " + Math.round(topL)
-                    + "), dưới " + botN + " quân (lum " + Math.round(botL) + ")");
+            float topContrast = res.avgPieceContrast(0, 1);
+            float botContrast = res.avgPieceContrast(6, 7);
+            EventLog.add("Hướng bàn cờ: trên " + topN + " quân (độ tương phản "
+                    + Math.round(topContrast) + "), dưới " + botN + " quân (độ tương phản "
+                    + Math.round(botContrast) + ")");
             if (topN < 8 || botN < 8) {
                 return "Không thấy đủ quân ở hai hàng đầu/cuối. Hãy hiệu chỉnh lại bàn cờ.";
             }
-            if (Math.abs(topL - botL) < 8) {
+            if (Math.abs(botContrast - topContrast) >= 8) {
+                whiteAtBottom = botContrast > topContrast;
+            } else if (Math.abs(topL - botL) >= 8) {
+                whiteAtBottom = botL > topL;
+            } else {
                 return "Không xác định được hướng bàn cờ. Chọn hướng thủ công trong Cài đặt.";
             }
-            whiteAtBottom = botL > topL;
         }
 
         board.clear();
         board.loadFromFen(START_FEN);
-        int[] expected = boardOccupancy(board);
-        int[] observed = res.boardOccupancy(whiteAtBottom);
-        int mismatch = 0;
-        int occ = 0;
-        for (int i = 0; i < 64; i++) {
-            if (observed[i] != expected[i]) {
-                mismatch++;
-            }
-            if (observed[i] == 1) {
-                occ++;
-            }
-        }
+        int mismatch = startRead.mismatch;
+        int occ = startRead.occupied;
         EventLog.add("Kiểm tra vị trí đầu: " + occ + "/32 quân, khớp " + (64 - mismatch) + "/64 ô");
-        if (occ < 28 || mismatch > 4) {
-            return "Bàn cờ chưa ở vị trí bắt đầu (hoặc hiệu chỉnh sai). Hãy mở ván mới rồi bật lại.";
+        if (!startRead.isValid()) {
+            return "Không nhận diện rõ bàn cờ (" + occ + "/32 quân, "
+                    + (64 - mismatch) + "/64 ô khớp). Hãy mở ván mới, căn khung sát mép "
+                    + "bàn cờ và bảo đảm nút nổi không che quân.";
         }
 
+        Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
         learnPieces(frame, res, occ == 32 && mismatch == 0);
         return null;
+    }
+
+    private StartFrame captureStartingPosition() {
+        StartFrame best = null;
+        int[] previousExact = null;
+        int previousThreshold = -1;
+        for (int attempt = 0; attempt < 8 && running; attempt++) {
+            ScreenCapture.Frame frame = capture.grab();
+            if (frame != null) {
+                BoardReader.StartRead read = BoardReader.readStartingPosition(
+                        frame.pixels, frame.width, frame.height,
+                        rect[0], rect[1], rect[2], rect[3]);
+                if (best == null || read.mismatch < best.read.mismatch) {
+                    ScreenCapture.Frame saved = new ScreenCapture.Frame();
+                    saved.width = frame.width;
+                    saved.height = frame.height;
+                    saved.pixels = frame.pixels.clone();
+                    best = new StartFrame(saved, read);
+                }
+                if (read.mismatch == 0) {
+                    int[] current = read.result.screenOccupancy();
+                    if (previousThreshold == read.devThreshold
+                            && Arrays.equals(previousExact, current)) {
+                        ScreenCapture.Frame saved = new ScreenCapture.Frame();
+                        saved.width = frame.width;
+                        saved.height = frame.height;
+                        saved.pixels = frame.pixels.clone();
+                        best = new StartFrame(saved, read);
+                        break;
+                    }
+                    previousExact = current;
+                    previousThreshold = read.devThreshold;
+                } else {
+                    previousExact = null;
+                    previousThreshold = -1;
+                }
+            }
+            sleep(150);
+        }
+        return best;
+    }
+
+    private static final class StartFrame {
+        final ScreenCapture.Frame frame;
+        final BoardReader.StartRead read;
+
+        StartFrame(ScreenCapture.Frame frame, BoardReader.StartRead read) {
+            this.frame = frame;
+            this.read = read;
+        }
     }
 
     /**
@@ -517,6 +597,52 @@ public final class GameController {
             }
         }
         return null;
+    }
+
+    private Move findMoveWithThresholdFallback(ScreenCapture.Frame frame, int[] observed,
+                                               BoardReader.Result current,
+                                               BoardReader.Result before) {
+        Move direct = findMove(observed, current, before);
+        if (direct != null) {
+            return direct;
+        }
+
+        int selectedDev = Prefs.getBoardDevThreshold(ctx);
+        float selectedFill = Prefs.getBoardFillThreshold(ctx);
+        int[] devThresholds = {
+                Math.min(42, selectedDev + 8),
+                Math.min(42, selectedDev + 4),
+                Math.max(12, selectedDev - 4),
+                Math.max(10, selectedDev - 8)
+        };
+        float[] fillThresholds = {
+                Math.min(0.20f, selectedFill * 1.4f),
+                Math.min(0.18f, selectedFill * 1.2f),
+                Math.max(0.035f, selectedFill * 0.8f),
+                Math.max(0.03f, selectedFill * 0.6f)
+        };
+        Move consensus = null;
+        int votes = 0;
+        for (int i = 0; i < devThresholds.length; i++) {
+            BoardReader.Result candidateRead = BoardReader.read(
+                    frame.pixels, frame.width, frame.height,
+                    rect[0], rect[1], rect[2], rect[3],
+                    devThresholds[i], fillThresholds[i]);
+            int[] candidateGrid = candidateRead.boardOccupancy(whiteAtBottom);
+            Move candidate = findMove(candidateGrid, candidateRead, before);
+            if (candidate == null) {
+                continue;
+            }
+            if (consensus == null) {
+                consensus = candidate;
+                votes = 1;
+            } else if (consensus.equals(candidate)) {
+                votes++;
+            } else {
+                return null;
+            }
+        }
+        return votes >= 2 ? consensus : null;
     }
 
     /**

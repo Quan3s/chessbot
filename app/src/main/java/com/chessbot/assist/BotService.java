@@ -25,10 +25,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
-import com.github.bhlangonijr.chesslib.Board;
-import com.github.bhlangonijr.chesslib.Piece;
-import com.github.bhlangonijr.chesslib.Square;
-
 /**
  * Foreground service that owns: the floating toggle button, the MediaProjection
  * capture session and the bot loop.
@@ -661,54 +657,59 @@ public class BotService extends Service {
             boolean ok = false;
             try {
                 sleep(350); // let the overlay disappear from the capture
-                ScreenCapture.Frame frame = null;
-                for (int i = 0; i < 8 && frame == null; i++) {
-                    if (capture == null) {
-                        break;
-                    }
-                    frame = capture.grab();
-                    if (frame == null) {
-                        sleep(180);
-                    }
-                }
-                if (frame == null) {
-                    toast("Không chụp được màn hình để kiểm tra");
-                    return;
-                }
                 float[] r = Prefs.getRect(this);
                 if (r == null) {
                     return;
                 }
-                BoardReader.Result res = BoardReader.read(frame.pixels, frame.width, frame.height,
-                        r[0], r[1], r[2], r[3]);
-                int topN = res.occupiedInRows(0, 1);
-                int botN = res.occupiedInRows(6, 7);
+                BoardReader.StartRead bestRead = null;
+                int[] previousExact = null;
+                int previousThreshold = -1;
+                for (int i = 0; i < 8; i++) {
+                    if (capture == null) {
+                        break;
+                    }
+                    ScreenCapture.Frame frame = capture.grab();
+                    if (frame != null) {
+                        BoardReader.StartRead read = BoardReader.readStartingPosition(
+                                frame.pixels, frame.width, frame.height,
+                                r[0], r[1], r[2], r[3]);
+                        if (bestRead == null || read.mismatch < bestRead.mismatch) {
+                            bestRead = read;
+                        }
+                        if (read.mismatch == 0) {
+                            int[] current = read.result.screenOccupancy();
+                            if (previousThreshold == read.devThreshold
+                                    && java.util.Arrays.equals(previousExact, current)) {
+                                bestRead = read;
+                                break;
+                            }
+                            previousExact = current;
+                            previousThreshold = read.devThreshold;
+                        } else {
+                            previousExact = null;
+                            previousThreshold = -1;
+                        }
+                    }
+                    sleep(150);
+                }
+                if (bestRead == null) {
+                    toast("Không chụp được màn hình để kiểm tra");
+                    return;
+                }
+                BoardReader.Result res = bestRead.result;
                 String msg;
-                if (topN < 8 || botN < 8) {
-                    msg = "Chưa thấy bàn cờ đầy đủ. Mở ván mới rồi chỉnh lại khung.";
+                msg = "Nhận diện " + bestRead.occupied + "/32 quân, khớp "
+                        + (64 - bestRead.mismatch) + "/64 ô";
+                ok = bestRead.isValid();
+                if (ok) {
+                    Prefs.setBoardThresholds(this, bestRead.devThreshold,
+                            bestRead.fillThreshold);
                 } else {
-                    float topL = res.avgPieceHigh(0, 1);
-                    float botL = res.avgPieceHigh(6, 7);
-                    boolean whiteAtBottom = botL >= topL;
-                    int[] obs = res.boardOccupancy(whiteAtBottom);
-                    int[] exp = startOccupancy();
-                    int mismatch = 0;
-                    int occ = 0;
-                    for (int i = 0; i < 64; i++) {
-                        if (obs[i] != exp[i]) {
-                            mismatch++;
-                        }
-                        if (obs[i] == 1) {
-                            occ++;
-                        }
-                    }
-                    msg = "Nhận diện " + occ + "/32 quân, khớp " + (64 - mismatch) + "/64 ô";
-                    ok = occ >= 28 && mismatch <= 4;
-                    if (!ok) {
-                        msg += " — chưa đúng vị trí đầu";
-                    }
+                    msg += " — căn khung sát mép bàn cờ và mở ván mới";
                 }
                 EventLog.add("Kiểm tra hiệu chỉnh: " + msg);
+                EventLog.add("Ngưỡng nhận diện: chênh lệch " + bestRead.devThreshold
+                        + " · diện tích " + Math.round(bestRead.fillThreshold * 100) + "%");
                 EventLog.add(res.debugRows());
                 final String m = msg;
                 final boolean passed = ok;
@@ -731,19 +732,6 @@ public class BotService extends Service {
         if (condition && action != null) {
             handler.post(action);
         }
-    }
-
-    private int[] startOccupancy() {
-        Board b = new Board();
-        int[] g = new int[64];
-        for (Square s : Square.values()) {
-            if (s == Square.NONE) {
-                continue;
-            }
-            Piece p = b.getPiece(s);
-            g[s.ordinal()] = (p == null || p == Piece.NONE) ? 0 : 1;
-        }
-        return g;
     }
 
     // ------------------------------------------------------------------ notification

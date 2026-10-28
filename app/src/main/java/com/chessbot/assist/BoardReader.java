@@ -22,6 +22,8 @@ public final class BoardReader {
     public static int DEV_THRESHOLD = 26;
     /** Fraction of the inner square that must differ to call it occupied. */
     public static float FILL_THRESHOLD = 0.10f;
+    private static final int[] START_DEV_THRESHOLDS = {26, 22, 18, 14};
+    private static final float[] START_FILL_THRESHOLDS = {0.10f, 0.08f, 0.06f, 0.045f};
     /** Ring used to sample the square background (fractions of the square). */
     private static final float RING_IN = 0.06f;
     private static final float RING_OUT = 0.16f;
@@ -123,6 +125,21 @@ public final class BoardReader {
             return n == 0 ? 0f : (float) (sum / n);
         }
 
+        public float avgPieceContrast(int rowFrom, int rowTo) {
+            double sum = 0;
+            int n = 0;
+            for (int r = rowFrom; r <= rowTo; r++) {
+                for (int c = 0; c < 8; c++) {
+                    Cell cell = cells[r * 8 + c];
+                    if (cell.occupied) {
+                        sum += cell.pieceLum - cell.bgLum;
+                        n++;
+                    }
+                }
+            }
+            return n == 0 ? 0f : (float) (sum / n);
+        }
+
         public String debugRows() {
             StringBuilder sb = new StringBuilder();
             for (int r = 0; r < 8; r++) {
@@ -147,6 +164,28 @@ public final class BoardReader {
         }
     }
 
+    /** Best read of the standard starting position across conservative thresholds. */
+    public static final class StartRead {
+        public final Result result;
+        public final int devThreshold;
+        public final float fillThreshold;
+        public final int occupied;
+        public final int mismatch;
+
+        private StartRead(Result result, int devThreshold, float fillThreshold,
+                          int occupied, int mismatch) {
+            this.result = result;
+            this.devThreshold = devThreshold;
+            this.fillThreshold = fillThreshold;
+            this.occupied = occupied;
+            this.mismatch = mismatch;
+        }
+
+        public boolean isValid() {
+            return occupied >= 28 && mismatch <= 4;
+        }
+    }
+
     /**
      * @param px     ARGB pixels
      * @param w      frame width
@@ -155,6 +194,48 @@ public final class BoardReader {
      */
     public static Result read(int[] px, int w, int h,
                               float l, float t, float r, float b) {
+        return read(px, w, h, l, t, r, b, DEV_THRESHOLD, FILL_THRESHOLD);
+    }
+
+    /**
+     * Read a starting board using several contrast settings. Starting-position
+     * occupancy is known, so it provides a safe signal for adapting to piece
+     * themes and low-resolution captures without guessing at arbitrary boards.
+     */
+    public static StartRead readStartingPosition(int[] px, int w, int h,
+                                                 float l, float t, float r, float b) {
+        StartRead best = null;
+        for (int i = 0; i < START_DEV_THRESHOLDS.length; i++) {
+            Result result = read(px, w, h, l, t, r, b,
+                    START_DEV_THRESHOLDS[i], START_FILL_THRESHOLDS[i]);
+            int occupied = 0;
+            int mismatch = 0;
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    boolean expected = row < 2 || row >= 6;
+                    boolean detected = result.cells[row * 8 + col].occupied;
+                    if (detected) {
+                        occupied++;
+                    }
+                    if (detected != expected) {
+                        mismatch++;
+                    }
+                }
+            }
+            if (best == null || mismatch < best.mismatch) {
+                best = new StartRead(result, START_DEV_THRESHOLDS[i],
+                        START_FILL_THRESHOLDS[i], occupied, mismatch);
+            }
+            if (mismatch == 0) {
+                break;
+            }
+        }
+        return best;
+    }
+
+    public static Result read(int[] px, int w, int h,
+                              float l, float t, float r, float b,
+                              int devThreshold, float fillThreshold) {
         Result res = new Result();
         int left = clamp(Math.round(l * w), 0, w - 1);
         int top = clamp(Math.round(t * h), 0, h - 1);
@@ -177,7 +258,8 @@ public final class BoardReader {
                 int x1 = left + Math.round((col + 1) * cw);
                 int y0 = top + Math.round(row * ch);
                 int y1 = top + Math.round((row + 1) * ch);
-                readCell(px, w, h, x0, y0, x1, y1, hist, lumHist, res.cells[row * 8 + col]);
+                readCell(px, w, h, x0, y0, x1, y1, hist, lumHist,
+                        res.cells[row * 8 + col], devThreshold, fillThreshold);
             }
         }
         return res;
@@ -185,7 +267,8 @@ public final class BoardReader {
 
     private static void readCell(int[] px, int w, int h,
                                  int x0, int y0, int x1, int y1,
-                                 int[] hist, int[] lumHist, Cell out) {
+                                 int[] hist, int[] lumHist, Cell out,
+                                 int devThreshold, float fillThreshold) {
         int sw = x1 - x0;
         int sh = y1 - y0;
         if (sw < 4 || sh < 4) {
@@ -321,7 +404,7 @@ public final class BoardReader {
                 if (d2 > d) d = d2;
                 if (d3 > d) d = d3;
                 total++;
-                if (d > DEV_THRESHOLD) {
+                if (d > devThreshold) {
                     dev++;
                     int l = lum(rr, gg, bb);
                     lumHist[l]++;
@@ -333,7 +416,7 @@ public final class BoardReader {
         }
 
         out.fill = total == 0 ? 0f : dev / (float) total;
-        if (out.fill < FILL_THRESHOLD || dev == 0) {
+        if (out.fill < fillThreshold || dev == 0) {
             out.occupied = false;
             out.color = EMPTY;
             out.pieceLum = 0;
