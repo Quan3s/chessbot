@@ -364,6 +364,18 @@ public final class GameController {
         EventLog.add("Ngưỡng nhận diện: chênh lệch " + startRead.devThreshold
                 + " · diện tích " + Math.round(startRead.fillThreshold * 100) + "%");
 
+        board.clear();
+        board.loadFromFen(START_FEN);
+        int mismatch = startRead.mismatch;
+        int occ = startRead.occupied;
+        EventLog.add("Kiểm tra vị trí đầu: " + occ + "/32 quân, khớp "
+                + (64 - mismatch) + "/64 ô");
+        if (!startRead.isValid()) {
+            return "Không nhận diện rõ bàn cờ (" + occ + "/32 quân, "
+                    + (64 - mismatch) + "/64 ô khớp). Hãy mở ván mới, căn khung sát mép "
+                    + "bàn cờ và bảo đảm nút nổi không che quân.";
+        }
+
         int orient = Prefs.getOrientation(ctx);
         if (orient == Prefs.ORIENT_WHITE_BOTTOM) {
             whiteAtBottom = true;
@@ -376,36 +388,45 @@ public final class GameController {
             float botL = res.avgPieceHigh(6, 7);
             float topContrast = res.avgPieceContrast(0, 1);
             float botContrast = res.avgPieceContrast(6, 7);
+            int topWhite = countPieceColor(res, 0, 1, BoardReader.WHITE);
+            int topBlack = countPieceColor(res, 0, 1, BoardReader.BLACK);
+            int bottomWhite = countPieceColor(res, 6, 7, BoardReader.WHITE);
+            int bottomBlack = countPieceColor(res, 6, 7, BoardReader.BLACK);
             EventLog.add("Hướng bàn cờ: trên " + topN + " quân (độ tương phản "
                     + Math.round(topContrast) + "), dưới " + botN + " quân (độ tương phản "
                     + Math.round(botContrast) + ")");
-            if (topN < 8 || botN < 8) {
-                return "Không thấy đủ quân ở hai hàng đầu/cuối. Hãy hiệu chỉnh lại bàn cờ.";
-            }
-            if (Math.abs(botContrast - topContrast) >= 8) {
+            int colorOrientationScore =
+                    topBlack + bottomWhite - topWhite - bottomBlack;
+            if (Math.abs(colorOrientationScore) >= 4) {
+                whiteAtBottom = colorOrientationScore > 0;
+            } else if (Math.abs(botContrast - topContrast) >= 8) {
                 whiteAtBottom = botContrast > topContrast;
             } else if (Math.abs(topL - botL) >= 8) {
                 whiteAtBottom = botL > topL;
             } else {
-                return "Không xác định được hướng bàn cờ. Chọn hướng thủ công trong Cài đặt.";
+                whiteAtBottom = Prefs.isBotWhite(ctx);
+                EventLog.add("Không tự phân biệt được hướng bàn cờ; tạm dùng hướng theo "
+                        + "màu bot đã chọn. Nếu bàn cờ bị lật, chọn hướng thủ công trong Cài đặt.");
             }
-        }
-
-        board.clear();
-        board.loadFromFen(START_FEN);
-        int mismatch = startRead.mismatch;
-        int occ = startRead.occupied;
-        EventLog.add("Kiểm tra vị trí đầu: " + occ + "/32 quân, khớp " + (64 - mismatch) + "/64 ô");
-        if (!startRead.isValid()) {
-            return "Không nhận diện rõ bàn cờ (" + occ + "/32 quân, "
-                    + (64 - mismatch) + "/64 ô khớp). Hãy mở ván mới, căn khung sát mép "
-                    + "bàn cờ và bảo đảm nút nổi không che quân.";
         }
 
         Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
         learnPieces(frame, res, occ == 32 && mismatch == 0);
         return null;
+    }
+
+    private int countPieceColor(BoardReader.Result result, int rowFrom, int rowTo, int color) {
+        int count = 0;
+        for (int row = rowFrom; row <= rowTo; row++) {
+            for (int col = 0; col < 8; col++) {
+                BoardReader.Cell cell = result.cells[row * 8 + col];
+                if (cell.occupied && cell.color == color) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     private StartFrame captureStartingPosition() {

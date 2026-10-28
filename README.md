@@ -8,16 +8,15 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.4.apk`.
-SHA-256: `94bce39bbcb62d7b61a5a095059ff055bfabfb5735b9ec2e8cbbcd2aa61f46e3`
+APK sau khi build: `build/ChessBot-Assist-v1.5.5.apk`.
 
-**Bản 1.5.4:** cải thiện theo dõi các nước trong ván: khi cách đọc bàn cờ chính không khớp, thử nhiều ngưỡng tương phản; chỉ nhận nước đi khi các khung hình liên tiếp cùng xác nhận một nước hợp lệ. Bản 1.5.3 thêm lấy nhiều khung hình lúc bắt đầu và tự chọn ngưỡng ban đầu.
+**Bản 1.5.5:** sửa trường hợp bàn cờ được nhận diện đủ ô nhưng bot vẫn dừng do không tự xác định được hướng. Tự chọn hướng từ màu quân trước, sau đó dùng độ tương phản; nếu ảnh không đủ thông tin, dùng hướng phù hợp với màu bot và ghi rõ trong nhật ký. Bản 1.5.4 cải thiện theo dõi các nước đi liên tiếp.
 
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.4.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.5.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
@@ -171,7 +170,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.4.apk
+# -> build/ChessBot-Assist-v1.5.5.apk
 ```
 
 Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` → `zipalign` → `apksigner`. Không dùng Gradle nên build được trên máy ít RAM.
