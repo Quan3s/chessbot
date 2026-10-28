@@ -22,8 +22,10 @@ public final class BoardReader {
     public static int DEV_THRESHOLD = 26;
     /** Fraction of the inner square that must differ to call it occupied. */
     public static float FILL_THRESHOLD = 0.10f;
-    private static final int[] START_DEV_THRESHOLDS = {26, 22, 18, 14};
-    private static final float[] START_FILL_THRESHOLDS = {0.10f, 0.08f, 0.06f, 0.045f};
+    private static final int[] START_DEV_THRESHOLDS = {42, 36, 32, 28, 26, 22, 18, 14};
+    private static final float[] START_FILL_THRESHOLDS = {
+            0.24f, 0.20f, 0.16f, 0.13f, 0.10f, 0.08f, 0.06f, 0.045f
+    };
     /** Ring used to sample the square background (fractions of the square). */
     private static final float RING_IN = 0.06f;
     private static final float RING_OUT = 0.16f;
@@ -171,14 +173,18 @@ public final class BoardReader {
         public final float fillThreshold;
         public final int occupied;
         public final int mismatch;
+        public final int falsePositives;
+        public final int missedPieces;
 
         private StartRead(Result result, int devThreshold, float fillThreshold,
-                          int occupied, int mismatch) {
+                          int occupied, int mismatch, int falsePositives, int missedPieces) {
             this.result = result;
             this.devThreshold = devThreshold;
             this.fillThreshold = fillThreshold;
             this.occupied = occupied;
             this.mismatch = mismatch;
+            this.falsePositives = falsePositives;
+            this.missedPieces = missedPieces;
         }
 
         public boolean isValid() {
@@ -210,12 +216,19 @@ public final class BoardReader {
                     START_DEV_THRESHOLDS[i], START_FILL_THRESHOLDS[i]);
             int occupied = 0;
             int mismatch = 0;
+            int falsePositives = 0;
+            int missedPieces = 0;
             for (int row = 0; row < 8; row++) {
                 for (int col = 0; col < 8; col++) {
                     boolean expected = row < 2 || row >= 6;
                     boolean detected = result.cells[row * 8 + col].occupied;
                     if (detected) {
                         occupied++;
+                    }
+                    if (detected && !expected) {
+                        falsePositives++;
+                    } else if (!detected && expected) {
+                        missedPieces++;
                     }
                     if (detected != expected) {
                         mismatch++;
@@ -224,7 +237,8 @@ public final class BoardReader {
             }
             if (best == null || mismatch < best.mismatch) {
                 best = new StartRead(result, START_DEV_THRESHOLDS[i],
-                        START_FILL_THRESHOLDS[i], occupied, mismatch);
+                        START_FILL_THRESHOLDS[i], occupied, mismatch,
+                        falsePositives, missedPieces);
             }
             if (mismatch == 0) {
                 break;

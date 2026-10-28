@@ -698,7 +698,8 @@ public class BotService extends Service {
                 }
                 BoardReader.Result res = bestRead.result;
                 String msg;
-                msg = "Nhận diện " + bestRead.occupied + "/32 quân, khớp "
+                msg = "Nhầm " + bestRead.falsePositives + " ô trống thành có quân, bỏ sót "
+                        + bestRead.missedPieces + " quân; đúng "
                         + (64 - bestRead.mismatch) + "/64 ô";
                 ok = bestRead.isValid();
                 if (ok) {

@@ -368,8 +368,9 @@ public final class GameController {
         board.loadFromFen(START_FEN);
         int mismatch = startRead.mismatch;
         int occ = startRead.occupied;
-        EventLog.add("Kiểm tra vị trí đầu: " + occ + "/32 quân, khớp "
-                + (64 - mismatch) + "/64 ô");
+        EventLog.add("Kiểm tra vị trí đầu: " + startRead.falsePositives
+                + " ô trống nhận nhầm là có quân, " + startRead.missedPieces
+                + " quân bị bỏ sót; đúng " + (64 - mismatch) + "/64 ô");
         if (!startRead.isValid()) {
             return "Không nhận diện rõ bàn cờ (" + occ + "/32 quân, "
                     + (64 - mismatch) + "/64 ô khớp). Hãy mở ván mới, căn khung sát mép "
