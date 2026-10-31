@@ -54,6 +54,7 @@ public class BotService extends Service {
     private MediaProjection projection;
     private ScreenCapture capture;
     private GameController controller;
+    private FenshotRecognizer fenshotRecognizer;
     private boolean prepared;
     private boolean calibrationShowing;
     private View calibrationView;
@@ -482,8 +483,9 @@ public class BotService extends Service {
         if (cal != null) {
             moveFabOutsideBoard(cal[0], cal[1], cal[2], cal[3]);
         }
+        FenshotRecognizer recognizer = getFenshotRecognizer();
         final long gen = ++generation;
-        final GameController c = new GameController(this, capture, screenW, screenH,
+        final GameController c = new GameController(this, capture, recognizer, screenW, screenH,
                 new GameController.Listener() {
                     @Override
                     public void onStatus(String text) {
@@ -497,6 +499,7 @@ public class BotService extends Service {
                                 return;
                             }
                             controller = null;
+                            releaseFenshotRecognizer();
                             if (fab != null) {
                                 fab.setRunning(false);
                             }
@@ -517,12 +520,33 @@ public class BotService extends Service {
         c.start();
     }
 
+    private FenshotRecognizer getFenshotRecognizer() {
+        if (fenshotRecognizer != null) {
+            return fenshotRecognizer;
+        }
+        try {
+            fenshotRecognizer = new FenshotRecognizer(this, wm);
+        } catch (RuntimeException e) {
+            EventLog.add("Không khởi tạo được Fenshot; dùng nhận diện dự phòng: " + e);
+        }
+        return fenshotRecognizer;
+    }
+
+    private void releaseFenshotRecognizer() {
+        FenshotRecognizer recognizer = fenshotRecognizer;
+        fenshotRecognizer = null;
+        if (recognizer != null) {
+            recognizer.close();
+        }
+    }
+
     private void stopBot(boolean announce) {
         GameController c = controller;
         controller = null;
         if (c != null) {
             c.stop();
         }
+        releaseFenshotRecognizer();
         if (fab != null) {
             fab.setRunning(false);
         }

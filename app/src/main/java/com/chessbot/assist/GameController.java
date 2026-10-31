@@ -40,9 +40,12 @@ public final class GameController {
 
     private static final String START_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
+    private static final long FENSHOT_RETRY_INTERVAL_MS = 450;
 
     private final Context ctx;
     private final ScreenCapture capture;
+    private final FenshotRecognizer fenshot;
     private final Listener listener;
     private final Board board = new Board();
     private final StockfishEngine engine;
@@ -61,11 +64,17 @@ public final class GameController {
     private int tapMode;
     /** True only when the shape templates were learned and self-checked. */
     private boolean typedReady;
+    private boolean fenshotFallbackLogged;
+    private long lastFenshotScanAt;
+    private long lastReliableFenshotAt;
+    private FenshotRecognizer.Result lastReliableFenshot;
 
-    public GameController(Context ctx, ScreenCapture capture, int screenW, int screenH,
+    public GameController(Context ctx, ScreenCapture capture, FenshotRecognizer fenshot,
+                          int screenW, int screenH,
                           Listener listener) {
         this.ctx = ctx;
         this.capture = capture;
+        this.fenshot = fenshot;
         this.screenW = screenW;
         this.screenH = screenH;
         this.listener = listener;
@@ -145,7 +154,29 @@ public final class GameController {
                 BoardReader.Result res = BoardReader.read(frame.pixels, frame.width, frame.height,
                         rect[0], rect[1], rect[2], rect[3],
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
-                int[] grid = res.boardOccupancy(whiteAtBottom);
+                int[] readerGrid = res.boardOccupancy(whiteAtBottom);
+                boolean readerSuggestsChange =
+                        !Arrays.equals(readerGrid, boardOccupancy(board));
+                long now = SystemClock.elapsedRealtime();
+                FenshotRecognizer.Result pieceRead = null;
+                if (readerSuggestsChange) {
+                    if (now - lastFenshotScanAt >= FENSHOT_RETRY_INTERVAL_MS) {
+                        pieceRead = recognizeWithFenshot(frame);
+                    } else if (lastReliableFenshot != null
+                            && now - lastReliableFenshotAt
+                                    <= FENSHOT_RETRY_INTERVAL_MS + 350) {
+                        pieceRead = lastReliableFenshot;
+                    }
+                } else {
+                    lastReliableFenshot = null;
+                }
+                boolean usedFenshot = pieceRead != null
+                        && pieceRead.reliable && pieceRead.plausible;
+                int[] grid = usedFenshot
+                        ? pieceRead.boardOccupancy() : res.boardOccupancy(whiteAtBottom);
+                if (usedFenshot && Prefs.getOrientation(ctx) == Prefs.ORIENT_AUTO) {
+                    whiteAtBottom = pieceRead.whiteAtBottom;
+                }
 
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
                     stable++;
@@ -180,8 +211,16 @@ public final class GameController {
                     if (tapPending && pending != null && matchesMove(grid, pending)) {
                         move = pending;
                     } else {
-                        Move occupancyMove = findMoveWithThresholdFallback(
-                                frame, grid, res, baseline);
+                        Move occupancyMove = null;
+                        boolean exactPieceMove = false;
+                        if (usedFenshot) {
+                            occupancyMove = findMoveByPlacement(pieceRead.placement);
+                            exactPieceMove = occupancyMove != null;
+                        }
+                        if (occupancyMove == null) {
+                            occupancyMove = findMoveWithThresholdFallback(
+                                    frame, grid, res, baseline);
+                        }
                         if (occupancyMove != null) {
                             if (occupancyMove.equals(previousObservedMove)) {
                                 observedMoveRepeats++;
@@ -221,7 +260,7 @@ public final class GameController {
                             sleep(230);
                             continue;
                         }
-                        if (typedReady) {
+                        if (typedReady && !exactPieceMove) {
                             // Piece types are extra evidence, never a
                             // replacement for the occupancy match. They are
                             // accepted only when unique and clearly better.
@@ -366,6 +405,19 @@ public final class GameController {
 
         board.clear();
         board.loadFromFen(START_FEN);
+        FenshotRecognizer.Result pieceRead = recognizeWithFenshot(frame);
+        if (pieceRead != null && pieceRead.reliable && pieceRead.plausible
+                && START_PLACEMENT.equals(pieceRead.placement)) {
+            int orient = Prefs.getOrientation(ctx);
+            whiteAtBottom = orient == Prefs.ORIENT_WHITE_BOTTOM
+                    || (orient == Prefs.ORIENT_AUTO && pieceRead.whiteAtBottom);
+            botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
+            Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
+            EventLog.add("Fenshot xác nhận vị trí đầu, độ tin cậy tối thiểu "
+                    + Math.round(pieceRead.minConfidence * 100) + "%");
+            return null;
+        }
+
         int mismatch = startRead.mismatch;
         int occ = startRead.occupied;
         EventLog.add("Kiểm tra vị trí đầu: " + startRead.falsePositives
@@ -416,6 +468,97 @@ public final class GameController {
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
         learnPieces(frame, res, occ == 32 && mismatch == 0);
         return null;
+    }
+
+    private FenshotRecognizer.Result recognizeWithFenshot(ScreenCapture.Frame frame) {
+        if (fenshot == null) {
+            return null;
+        }
+        lastFenshotScanAt = SystemClock.elapsedRealtime();
+        try {
+            FenshotRecognizer.Result result = fenshot.recognize(frame, rect);
+            if (result != null && result.reliable && result.plausible) {
+                lastReliableFenshot = result;
+                lastReliableFenshotAt = lastFenshotScanAt;
+                if (fenshotFallbackLogged) {
+                    EventLog.add("Fenshot nhận diện ổn định trở lại");
+                    fenshotFallbackLogged = false;
+                }
+                return result;
+            }
+            lastReliableFenshot = null;
+            if (!fenshotFallbackLogged) {
+                EventLog.add(result == null
+                        ? "Fenshot chưa đọc được bàn cờ; dùng nhận diện dự phòng."
+                        : "Fenshot chưa đủ tin cậy (tối thiểu "
+                                + Math.round(result.minConfidence * 100)
+                                + "%); dùng nhận diện dự phòng.");
+                fenshotFallbackLogged = true;
+            }
+            return result;
+        } catch (Exception e) {
+            lastReliableFenshot = null;
+            if (!fenshotFallbackLogged) {
+                EventLog.add("Fenshot lỗi, dùng nhận diện dự phòng: " + e);
+                fenshotFallbackLogged = true;
+            }
+            return null;
+        }
+    }
+
+    private Move findMoveByPlacement(String placement) {
+        Move matched = null;
+        for (Move move : board.legalMoves()) {
+            Board after = board.clone();
+            after.doMove(move);
+            if (matchesPlacement(after, placement)) {
+                if (matched != null) {
+                    return null;
+                }
+                matched = move;
+            }
+        }
+        return matched;
+    }
+
+    private boolean matchesPlacement(Board position, String placement) {
+        String[] ranks = placement.split("/");
+        if (ranks.length != 8) {
+            return false;
+        }
+        for (int row = 0; row < 8; row++) {
+            int file = 0;
+            for (int i = 0; i < ranks[row].length(); i++) {
+                char symbol = ranks[row].charAt(i);
+                if (symbol >= '1' && symbol <= '8') {
+                    int emptySquares = symbol - '0';
+                    if (file + emptySquares > 8) {
+                        return false;
+                    }
+                    for (int empty = 0; empty < emptySquares; empty++) {
+                        Square square = Square.values()[(7 - row) * 8 + file++];
+                        Piece piece = position.getPiece(square);
+                        if (piece != null && piece != Piece.NONE) {
+                            return false;
+                        }
+                    }
+                } else if ("KQRBNPkqrbnp".indexOf(symbol) >= 0 && file < 8) {
+                    Square square = Square.values()[(7 - row) * 8 + file];
+                    Piece piece = position.getPiece(square);
+                    if (piece == null || piece == Piece.NONE
+                            || !String.valueOf(symbol).equals(piece.getFenSymbol())) {
+                        return false;
+                    }
+                    file++;
+                } else {
+                    return false;
+                }
+            }
+            if (file != 8) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private int countPieceColor(BoardReader.Result result, int rowFrom, int rowTo, int color) {
