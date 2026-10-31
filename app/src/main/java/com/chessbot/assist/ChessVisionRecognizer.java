@@ -27,8 +27,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Offline Fenshot screenshot classifier hosted in a small, transparent WebView. */
-public final class FenshotRecognizer {
+/** Offline OpenCV Chess Bot ONNX classifier hosted in a transparent WebView. */
+public final class ChessVisionRecognizer {
 
     private static final String HOST = "chessbot.local";
     private static final String ORIGIN = "https://" + HOST;
@@ -37,15 +37,18 @@ public final class FenshotRecognizer {
 
     public static final class Result {
         public final String placement;
+        public final String placementOtherOrientation;
         public final boolean whiteAtBottom;
         public final boolean reliable;
         public final boolean plausible;
         public final float minConfidence;
         public final float meanConfidence;
 
-        private Result(String placement, boolean whiteAtBottom, boolean reliable,
-                       boolean plausible, float minConfidence, float meanConfidence) {
+        private Result(String placement, String placementOtherOrientation,
+                       boolean whiteAtBottom, boolean reliable, boolean plausible,
+                       float minConfidence, float meanConfidence) {
             this.placement = placement;
+            this.placementOtherOrientation = placementOtherOrientation;
             this.whiteAtBottom = whiteAtBottom;
             this.reliable = reliable;
             this.plausible = plausible;
@@ -54,11 +57,15 @@ public final class FenshotRecognizer {
         }
 
         /** Occupancy in chesslib square order: a1..h8. */
-        public int[] boardOccupancy() {
+        public String placementFor(boolean whiteBottom) {
+            return whiteBottom == whiteAtBottom ? placement : placementOtherOrientation;
+        }
+
+        public int[] boardOccupancy(boolean whiteBottom) {
             int[] occupancy = new int[64];
-            String[] ranks = placement.split("/");
+            String[] ranks = placementFor(whiteBottom).split("/");
             if (ranks.length != 8) {
-                throw new IllegalStateException("Fenshot returned invalid placement");
+                throw new IllegalStateException("Classifier returned invalid placement");
             }
             for (int row = 0; row < 8; row++) {
                 int file = 0;
@@ -68,17 +75,17 @@ public final class FenshotRecognizer {
                         file += c - '0';
                     } else if ("KQRBNPkqrbnp".indexOf(c) >= 0) {
                         if (file >= 8) {
-                            throw new IllegalStateException("Fenshot returned invalid rank");
+                            throw new IllegalStateException("Classifier returned invalid rank");
                         }
                         int rank = 7 - row;
                         occupancy[rank * 8 + file] = 1;
                         file++;
                     } else {
-                        throw new IllegalStateException("Fenshot returned invalid piece");
+                        throw new IllegalStateException("Classifier returned invalid piece");
                     }
                 }
                 if (file != 8) {
-                    throw new IllegalStateException("Fenshot returned incomplete rank");
+                    throw new IllegalStateException("Classifier returned incomplete rank");
                 }
             }
             return occupancy;
@@ -108,13 +115,13 @@ public final class FenshotRecognizer {
     private PendingScan pending;
     private volatile boolean closed;
 
-    public FenshotRecognizer(Context context, WindowManager windowManager) {
+    public ChessVisionRecognizer(Context context, WindowManager windowManager) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            throw new IllegalStateException("Fenshot WebView must be created on the main thread");
+            throw new IllegalStateException("Chess WebView must be created on the main thread");
         }
         this.context = context.getApplicationContext();
         this.windowManager = windowManager;
-        this.frameFile = new File(this.context.getCacheDir(), "fenshot-frame.jpg");
+        this.frameFile = new File(this.context.getCacheDir(), "chess-recognition-frame.jpg");
         createWebView(context);
     }
 
@@ -141,15 +148,15 @@ public final class FenshotRecognizer {
         params.x = 0;
         params.y = 0;
         windowManager.addView(webView, params);
-        webView.loadUrl(ORIGIN + "/fenshot/index.html");
+        webView.loadUrl(ORIGIN + "/chess-recognition/index.html");
     }
 
     public Result recognize(ScreenCapture.Frame frame, float[] boardRect) throws Exception {
         if (closed) {
-            throw new IllegalStateException("Fenshot recognizer is closed");
+            throw new IllegalStateException("Chess recognizer is closed");
         }
         if (!pageLoaded.await(PAGE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            throw new IOException("Fenshot page did not load");
+            throw new IOException("Chess recognizer page did not load");
         }
         writeBoardImage(frame, boardRect);
 
@@ -157,13 +164,13 @@ public final class FenshotRecognizer {
         PendingScan current = new PendingScan(id);
         synchronized (pendingLock) {
             if (pending != null) {
-                throw new IllegalStateException("Fenshot scan already in progress");
+                throw new IllegalStateException("Chess recognition already in progress");
             }
             pending = current;
         }
         mainHandler.post(() -> {
             if (webView == null || closed) {
-                completeWithError(id, "Fenshot WebView is unavailable");
+                completeWithError(id, "Chess recognizer WebView is unavailable");
                 return;
             }
             webView.evaluateJavascript(
@@ -180,7 +187,7 @@ public final class FenshotRecognizer {
                     pending = null;
                 }
             }
-            throw new IOException("Fenshot scan timed out");
+            throw new IOException("Chess recognition timed out");
         }
         if (current.error != null) {
             throw new IOException(current.error);
@@ -189,12 +196,10 @@ public final class FenshotRecognizer {
     }
 
     private void writeBoardImage(ScreenCapture.Frame frame, float[] rect) throws IOException {
-        int marginX = Math.max(2, Math.round((rect[2] - rect[0]) * frame.width * 0.035f));
-        int marginY = Math.max(2, Math.round((rect[3] - rect[1]) * frame.height * 0.035f));
-        int left = clamp(Math.round(rect[0] * frame.width) - marginX, 0, frame.width - 1);
-        int top = clamp(Math.round(rect[1] * frame.height) - marginY, 0, frame.height - 1);
-        int right = clamp(Math.round(rect[2] * frame.width) + marginX, left + 8, frame.width);
-        int bottom = clamp(Math.round(rect[3] * frame.height) + marginY, top + 8, frame.height);
+        int left = clamp(Math.round(rect[0] * frame.width), 0, frame.width - 1);
+        int top = clamp(Math.round(rect[1] * frame.height), 0, frame.height - 1);
+        int right = clamp(Math.round(rect[2] * frame.width), left + 8, frame.width);
+        int bottom = clamp(Math.round(rect[3] * frame.height), top + 8, frame.height);
         Bitmap bitmap = Bitmap.createBitmap(frame.pixels, frame.width, frame.height,
                 Bitmap.Config.ARGB_8888);
         Bitmap crop = Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top);
@@ -219,6 +224,7 @@ public final class FenshotRecognizer {
                 complete(requestId, null, null);
             } else {
                 Result result = new Result(value.getString("placement"),
+                        value.getString("placementOtherOrientation"),
                         value.getBoolean("whiteAtBottom"),
                         value.getBoolean("reliable"),
                         value.getBoolean("plausible"),
@@ -227,7 +233,7 @@ public final class FenshotRecognizer {
                 complete(requestId, result, null);
             }
         } catch (Exception e) {
-            completeWithError(requestId, "Invalid Fenshot result: " + e.getMessage());
+            completeWithError(requestId, "Invalid chess recognition result: " + e.getMessage());
         }
     }
 
@@ -251,7 +257,7 @@ public final class FenshotRecognizer {
         closed = true;
         synchronized (pendingLock) {
             if (pending != null) {
-                pending.error = "Fenshot recognizer closed";
+                pending.error = "Chess recognizer closed";
                 pending.done.countDown();
                 pending = null;
             }
@@ -295,10 +301,10 @@ public final class FenshotRecognizer {
                     return response("image/jpeg", new FileInputStream(frameFile));
                 }
                 String assetPath;
-                if (path.startsWith("/fenshot/")) {
+                if (path.startsWith("/chess-recognition/")) {
                     assetPath = path.substring(1);
                 } else if (path.startsWith("/assets/")) {
-                    assetPath = "fenshot" + path;
+                    assetPath = "chess-recognition" + path;
                 } else {
                     return emptyResponse(404, "Not found");
                 }
@@ -313,9 +319,9 @@ public final class FenshotRecognizer {
 
         @Override
         public void onPageFinished(WebView view, String url) {
-            if ((ORIGIN + "/fenshot/index.html").equals(url)) {
+            if ((ORIGIN + "/chess-recognition/index.html").equals(url)) {
                 pageLoaded.countDown();
-                EventLog.add("Fenshot offline đã sẵn sàng");
+                EventLog.add("Nhận diện ONNX offline đã sẵn sàng");
             }
         }
 

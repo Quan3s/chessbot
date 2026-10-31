@@ -54,7 +54,7 @@ public class BotService extends Service {
     private MediaProjection projection;
     private ScreenCapture capture;
     private GameController controller;
-    private FenshotRecognizer fenshotRecognizer;
+    private ChessVisionRecognizer chessVisionRecognizer;
     private boolean prepared;
     private boolean calibrationShowing;
     private View calibrationView;
@@ -483,7 +483,7 @@ public class BotService extends Service {
         if (cal != null) {
             moveFabOutsideBoard(cal[0], cal[1], cal[2], cal[3]);
         }
-        FenshotRecognizer recognizer = getFenshotRecognizer();
+        ChessVisionRecognizer recognizer = getChessVisionRecognizer();
         final long gen = ++generation;
         final GameController c = new GameController(this, capture, recognizer, screenW, screenH,
                 new GameController.Listener() {
@@ -499,7 +499,7 @@ public class BotService extends Service {
                                 return;
                             }
                             controller = null;
-                            releaseFenshotRecognizer();
+                            releaseChessVisionRecognizer();
                             if (fab != null) {
                                 fab.setRunning(false);
                             }
@@ -520,21 +520,21 @@ public class BotService extends Service {
         c.start();
     }
 
-    private FenshotRecognizer getFenshotRecognizer() {
-        if (fenshotRecognizer != null) {
-            return fenshotRecognizer;
+    private ChessVisionRecognizer getChessVisionRecognizer() {
+        if (chessVisionRecognizer != null) {
+            return chessVisionRecognizer;
         }
         try {
-            fenshotRecognizer = new FenshotRecognizer(this, wm);
+            chessVisionRecognizer = new ChessVisionRecognizer(this, wm);
         } catch (RuntimeException e) {
-            EventLog.add("Không khởi tạo được Fenshot; dùng nhận diện dự phòng: " + e);
+            EventLog.add("Không khởi tạo được model cờ; dùng nhận diện dự phòng: " + e);
         }
-        return fenshotRecognizer;
+        return chessVisionRecognizer;
     }
 
-    private void releaseFenshotRecognizer() {
-        FenshotRecognizer recognizer = fenshotRecognizer;
-        fenshotRecognizer = null;
+    private void releaseChessVisionRecognizer() {
+        ChessVisionRecognizer recognizer = chessVisionRecognizer;
+        chessVisionRecognizer = null;
         if (recognizer != null) {
             recognizer.close();
         }
@@ -546,7 +546,7 @@ public class BotService extends Service {
         if (c != null) {
             c.stop();
         }
-        releaseFenshotRecognizer();
+        releaseChessVisionRecognizer();
         if (fab != null) {
             fab.setRunning(false);
         }

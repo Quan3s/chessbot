@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
-const assetsDir = resolve(__dirname, "../../app/src/main/assets/fenshot");
+const assetsDir = resolve(__dirname, "../../app/src/main/assets/chess-recognition");
 
 export default defineConfig({
   base: "/",

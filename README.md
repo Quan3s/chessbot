@@ -8,18 +8,19 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.8.apk`.
-SHA-256: `3b56bf3b805b121d21cc1f0d177f9237828973e19df7c7bad3b000c75f37d31d`
+APK sau khi build: `build/ChessBot-Assist-v1.5.9.apk`.
 
 **Bản 1.5.7:** quay về ngưỡng nhận diện gốc của v1.5.2 làm lựa chọn đầu tiên, đồng thời thử thêm các ngưỡng tương phản rộng hơn khi cần. Nhật ký nay ghi rõ số ô trống bị nhận nhầm, số quân bị bỏ sót và thông báo lỗi cũng nêu đúng hai loại sai lệch này.
 
-**Bản 1.5.8:** tích hợp Fenshot + ONNX Runtime để nhận diện loại và màu quân từ ảnh bàn cờ. Mô hình chạy offline trên thiết bị; kết quả chỉ được dùng khi đạt ngưỡng tin cậy, nếu không bot quay về bộ nhận diện cũ.
+**Bản 1.5.8:** thử nghiệm Fenshot + ONNX Runtime.
+
+**Bản 1.5.9:** thay Fenshot bằng model ONNX 13 lớp từ [OpenCV-Chess-Bot](https://github.com/7dpk/OpenCV-Chess-Bot). Model phân loại 64 ô, cả loại và màu quân, chạy offline trên ảnh bàn đã hiệu chỉnh; bot quét định kỳ kể cả khi BoardReader không phát hiện thay đổi. Kết quả phải đủ tin cậy và khớp một nước hợp lệ, nếu không sẽ dùng bộ đọc dự phòng.
 
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.8.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.9.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
@@ -125,7 +126,7 @@ MediaProjection (0.5×) ──> BoardReader ──> lưới 8×8 có quân / tr�
 
 - **Học bộ quân ở thế cờ chuẩn.** App dùng vị trí đầu đã biết để gán nhãn ảnh các quân trên từng ô, học đủ 12 loại quân (6 trắng, 6 đen) của đúng bộ quân/theme đang dùng. Trên các khung hình sau, app so silhouette từng quân với mẫu đã học và lấy màu từ đặc trưng ảnh; nhận dạng chỉ được bật nếu học đủ mẫu và tự kiểm tra thành công.
 - **Xác nhận bằng luật cờ.** Với mỗi ảnh bàn cờ đổi, app thử nước hợp lệ và chỉ dùng kết quả nhận diện quân khi toàn bộ bàn cờ khớp chính xác một nước đi. Nếu có ô nào không chắc, app quay về so lưới ô có quân/trống như trước; nếu cách đó cũng không xác định duy nhất nước đi, app chờ/báo lỗi chứ không đoán.
-- **Fenshot offline.** Model ONNX nhận dạng quân và màu quân trên thiết bị. Chỉ kết quả có confidence đủ cao và vị trí hợp lý được dùng; kết quả không tin cậy quay về BoardReader.
+- **Model OpenCV-Chess-Bot offline.** CNN ONNX phân loại loại quân/màu quân cho 64 ô trong thế cờ giữa ván. Chỉ kết quả có confidence đủ cao và vị trí hợp lý được dùng; nước đi vẫn cần khớp với luật cờ, nếu không sẽ quay về BoardReader.
 - **Phân biệt nước ăn quân** bằng độ sáng / độ đặc của quân tại ô nguồn (trước) và ô đích (sau), vì nhiều nước ăn quân khác nhau có thể cho cùng một lưới ô trống / có quân.
 - **Nút nổi** là `TYPE_APPLICATION_OVERLAY`, kéo được, lưu vị trí; giữ 0,5 giây để mở hiệu chỉnh.
 - **Stockfish** mặc định là binary tĩnh đóng gói trong `jniLibs`; bản tùy chọn được tải vào vùng riêng của app và kiểm tra UCI trước khi chọn. Engine chạy qua UCI (`uci`, `setoption`, `position fen`, `go movetime`), không cần root. Skill 20 tắt `UCI_LimitStrength`; mặc định dùng tối đa 16 luồng và hash tự chọn theo RAM thực (128–1024 MB), có thể chỉnh trong mục Nâng cao.
@@ -165,18 +166,18 @@ MediaProjection (0.5×) ──> BoardReader ──> lưới 8×8 có quân / tr�
 Yêu cầu:
 
 - JDK 21 (`javac`, `keytool`)
-- Node.js 20+ / npm (để bundle Fenshot offline)
+- Node.js 20+ / npm (để bundle model OpenCV-Chess-Bot và ONNX Runtime)
 - Android SDK platform 35 + build-tools 35.0.0 (mặc định `/opt/android-sdk`, hoặc đặt `ANDROID_SDK_ROOT`)
 - `libs/chesslib-1.3.3.jar`
 - `app/src/main/jniLibs/arm64-v8a/libstockfish.so` và `.../armeabi-v7a/libstockfish.so` (Stockfish 16 mặc định, binary tĩnh)
 
 ```bash
 cd chessbot
-cd recognition/fenshot-web && npm ci && npm run build && cd ../..
+cd recognition/opencv-chess-bot && npm ci && npm run build && cd ../..
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.8.apk
+# -> build/ChessBot-Assist-v1.5.9.apk
 ```
 
 Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` → `zipalign` → `apksigner`. Không dùng Gradle nên build được trên máy ít RAM.
@@ -188,7 +189,7 @@ Cấu trúc chính:
 ```
 chessbot/
 ├── build.sh                     # build APK thủ công
-├── recognition/fenshot-web/     # tạo asset nhận diện offline
+├── recognition/opencv-chess-bot/# model phân loại quân offline
 ├── libs/chesslib-1.3.3.jar      # luật cờ vua
 └── app/src/main/
     ├── AndroidManifest.xml

@@ -3,4 +3,4 @@ keystore.jks
 .release-signing.env
 *.apk.idsig
 site/*.apk
-recognition/fenshot-web/node_modules/
+recognition/opencv-chess-bot/node_modules/

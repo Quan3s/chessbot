@@ -10,9 +10,9 @@ BT="$SDK/build-tools/35.0.0"
 PLATFORM="$SDK/platforms/android-35/android.jar"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="$ROOT/build"
-WORK="$OUT/.fenshot-build"
+WORK="$OUT/.recognition-build"
 LIB="$ROOT/libs/chesslib-1.3.3.jar"
-NAME="ChessBot-Assist-v1.5.8"
+NAME="ChessBot-Assist-v1.5.9"
 
 mkdir -p "$OUT"
 rm -rf "$WORK"
@@ -27,8 +27,8 @@ echo "[1/6] resources"
     --java "$WORK/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 14 \
-    --version-name "1.5.8" \
+    --version-code 15 \
+    --version-name "1.5.9" \
     --auto-add-overlay \
     "$WORK/res.zip"
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.8</title>
+<title>ChessBot Assist 1.5.9</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,23 +88,24 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.8</span>
+  <span class="badge">Bản 1.5.9</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.8/ChessBot-Assist-v1.5.8.apk">
-      ⬇ Tải APK (71 MB)
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.9/ChessBot-Assist-v1.5.9.apk">
+      ⬇ Tải APK (70 MB)
     </a>
     <div class="meta">
       Android 8.0 – 16 · arm64-v8a + armeabi-v7a<br>
-      SHA-256: <code>3b56bf3b805b121d21cc1f0d177f9237828973e19df7c7bad3b000c75f37d31d</code>
+      SHA-256: <code>e75cbaeecdab7dfdc65e06a34c31e24765e20d131451885f7eca3563edcecdd2</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.8</h2>
+    <h2>Có gì mới ở 1.5.9</h2>
     <ul>
-      <li><b>Fenshot nhận diện offline:</b> dùng model ONNX để nhận diện loại quân và màu quân ngay trên điện thoại; không gửi ảnh lên mạng.</li>
-      <li><b>Chỉ dùng kết quả tin cậy:</b> nếu model không chắc, bot quay về bộ nhận diện cũ.</li>
+      <li><b>Model OpenCV-Chess-Bot:</b> nhận diện loại quân và màu quân trên cả 64 ô, kể cả trong thế cờ giữa ván; chạy hoàn toàn offline.</li>
+      <li><b>Quét độc lập với bộ đọc cũ:</b> model kiểm tra định kỳ ngay cả khi BoardReader bỏ sót thay đổi bàn cờ.</li>
+      <li><b>Kiểm tra an toàn:</b> chỉ nhận nước đi khi model đủ tin cậy và bàn cờ khớp nước hợp lệ.</li>
       <li><b>Giữ nguyên tính năng 1.5.7:</b> nhận diện dựa trên v1.5.2, chẩn đoán rõ hơn và tải/chọn Stockfish tùy chỉnh.</li>
       <li><b>Nhận diện dựa trên v1.5.2:</b> giữ ngưỡng gốc làm lựa chọn đầu tiên, đồng thời thử thêm ngưỡng tương phản rộng hơn cho các kiểu bàn khác nhau.</li>
       <li><b>Chẩn đoán rõ hơn:</b> nhật ký nêu riêng số ô trống nhận nhầm và số quân bị bỏ sót.</li>
@@ -121,12 +122,12 @@
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.8 dùng cùng khóa ký với bản 1.5.7; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.9 dùng cùng khóa ký với bản 1.5.8; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
     <div class="note">
-      <b>Nhận diện bàn cờ chạy offline.</b> Fenshot phân loại quân ngay trên thiết bị. Bot chỉ dùng kết quả đủ tin cậy và khớp với nước đi hợp lệ; nếu không chắc, bot quay về cách nhận diện trước hoặc chờ, không đoán bừa.
+      <b>Nhận diện bàn cờ chạy offline.</b> Model phân loại loại quân/màu quân trên 64 ô. Bot chỉ dùng kết quả đủ tin cậy và khớp với nước đi hợp lệ; nếu không chắc, bot quay về cách nhận diện trước hoặc chờ, không đoán bừa.
     </div>
   </div>
 

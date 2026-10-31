@@ -1,12 +1,11 @@
 {
-  "name": "chessbot-fenshot-web",
+  "name": "chessbot-opencv-chess-bot-recognizer",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build && node copy-assets.mjs"
   },
   "dependencies": {
-    "@scoriiu/fenshot": "0.1.5",
     "onnxruntime-web": "1.26.0"
   },
   "devDependencies": {

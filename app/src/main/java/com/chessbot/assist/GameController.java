@@ -41,11 +41,11 @@ public final class GameController {
     private static final String START_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
-    private static final long FENSHOT_RETRY_INTERVAL_MS = 450;
+    private static final long RECOGNITION_INTERVAL_MS = 600;
 
     private final Context ctx;
     private final ScreenCapture capture;
-    private final FenshotRecognizer fenshot;
+    private final ChessVisionRecognizer chessVision;
     private final Listener listener;
     private final Board board = new Board();
     private final StockfishEngine engine;
@@ -64,17 +64,17 @@ public final class GameController {
     private int tapMode;
     /** True only when the shape templates were learned and self-checked. */
     private boolean typedReady;
-    private boolean fenshotFallbackLogged;
-    private long lastFenshotScanAt;
-    private long lastReliableFenshotAt;
-    private FenshotRecognizer.Result lastReliableFenshot;
+    private boolean visionFallbackLogged;
+    private long lastVisionScanAt;
+    private long lastReliableVisionAt;
+    private ChessVisionRecognizer.Result lastReliableVision;
 
-    public GameController(Context ctx, ScreenCapture capture, FenshotRecognizer fenshot,
+    public GameController(Context ctx, ScreenCapture capture, ChessVisionRecognizer chessVision,
                           int screenW, int screenH,
                           Listener listener) {
         this.ctx = ctx;
         this.capture = capture;
-        this.fenshot = fenshot;
+        this.chessVision = chessVision;
         this.screenW = screenW;
         this.screenH = screenH;
         this.listener = listener;
@@ -155,29 +155,19 @@ public final class GameController {
                         rect[0], rect[1], rect[2], rect[3],
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
                 int[] readerGrid = res.boardOccupancy(whiteAtBottom);
-                boolean readerSuggestsChange =
-                        !Arrays.equals(readerGrid, boardOccupancy(board));
                 long now = SystemClock.elapsedRealtime();
-                FenshotRecognizer.Result pieceRead = null;
-                if (readerSuggestsChange) {
-                    if (now - lastFenshotScanAt >= FENSHOT_RETRY_INTERVAL_MS) {
-                        pieceRead = recognizeWithFenshot(frame);
-                    } else if (lastReliableFenshot != null
-                            && now - lastReliableFenshotAt
-                                    <= FENSHOT_RETRY_INTERVAL_MS + 350) {
-                        pieceRead = lastReliableFenshot;
-                    }
-                } else {
-                    lastReliableFenshot = null;
+                ChessVisionRecognizer.Result pieceRead = null;
+                if (now - lastVisionScanAt >= RECOGNITION_INTERVAL_MS) {
+                    pieceRead = recognizeWithChessVision(frame);
+                } else if (lastReliableVision != null
+                        && now - lastReliableVisionAt <= RECOGNITION_INTERVAL_MS + 350) {
+                    pieceRead = lastReliableVision;
                 }
-                boolean usedFenshot = pieceRead != null
+                boolean usedChessVision = pieceRead != null
                         && pieceRead.reliable && pieceRead.plausible;
-                int[] grid = usedFenshot
-                        ? pieceRead.boardOccupancy() : res.boardOccupancy(whiteAtBottom);
-                if (usedFenshot && Prefs.getOrientation(ctx) == Prefs.ORIENT_AUTO) {
-                    whiteAtBottom = pieceRead.whiteAtBottom;
-                }
-
+                boolean pieceReadWhiteBottom = whiteAtBottom;
+                int[] grid = usedChessVision
+                        ? pieceRead.boardOccupancy(pieceReadWhiteBottom) : readerGrid;
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
                     stable++;
                 } else {
@@ -213,8 +203,9 @@ public final class GameController {
                     } else {
                         Move occupancyMove = null;
                         boolean exactPieceMove = false;
-                        if (usedFenshot) {
-                            occupancyMove = findMoveByPlacement(pieceRead.placement);
+                        if (usedChessVision) {
+                            occupancyMove = findMoveByPlacement(
+                                    pieceRead.placementFor(pieceReadWhiteBottom));
                             exactPieceMove = occupancyMove != null;
                         }
                         if (occupancyMove == null) {
@@ -405,15 +396,17 @@ public final class GameController {
 
         board.clear();
         board.loadFromFen(START_FEN);
-        FenshotRecognizer.Result pieceRead = recognizeWithFenshot(frame);
+        ChessVisionRecognizer.Result pieceRead = recognizeWithChessVision(frame);
+        int orient = Prefs.getOrientation(ctx);
+        boolean recognizedWhiteAtBottom = orient == Prefs.ORIENT_WHITE_BOTTOM
+                || (orient == Prefs.ORIENT_AUTO && pieceRead != null
+                        && pieceRead.whiteAtBottom);
         if (pieceRead != null && pieceRead.reliable && pieceRead.plausible
-                && START_PLACEMENT.equals(pieceRead.placement)) {
-            int orient = Prefs.getOrientation(ctx);
-            whiteAtBottom = orient == Prefs.ORIENT_WHITE_BOTTOM
-                    || (orient == Prefs.ORIENT_AUTO && pieceRead.whiteAtBottom);
+                && START_PLACEMENT.equals(pieceRead.placementFor(recognizedWhiteAtBottom))) {
+            whiteAtBottom = recognizedWhiteAtBottom;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
             Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
-            EventLog.add("Fenshot xác nhận vị trí đầu, độ tin cậy tối thiểu "
+            EventLog.add("Model xác nhận vị trí đầu, độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%");
             return null;
         }
@@ -430,7 +423,6 @@ public final class GameController {
                     + "bàn cờ và bảo đảm nút nổi không che quân.";
         }
 
-        int orient = Prefs.getOrientation(ctx);
         if (orient == Prefs.ORIENT_WHITE_BOTTOM) {
             whiteAtBottom = true;
         } else if (orient == Prefs.ORIENT_WHITE_TOP) {
@@ -470,37 +462,37 @@ public final class GameController {
         return null;
     }
 
-    private FenshotRecognizer.Result recognizeWithFenshot(ScreenCapture.Frame frame) {
-        if (fenshot == null) {
+    private ChessVisionRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
+        if (chessVision == null) {
             return null;
         }
-        lastFenshotScanAt = SystemClock.elapsedRealtime();
+        lastVisionScanAt = SystemClock.elapsedRealtime();
         try {
-            FenshotRecognizer.Result result = fenshot.recognize(frame, rect);
+            ChessVisionRecognizer.Result result = chessVision.recognize(frame, rect);
             if (result != null && result.reliable && result.plausible) {
-                lastReliableFenshot = result;
-                lastReliableFenshotAt = lastFenshotScanAt;
-                if (fenshotFallbackLogged) {
-                    EventLog.add("Fenshot nhận diện ổn định trở lại");
-                    fenshotFallbackLogged = false;
+                lastReliableVision = result;
+                lastReliableVisionAt = lastVisionScanAt;
+                if (visionFallbackLogged) {
+                    EventLog.add("Model nhận diện ổn định trở lại");
+                    visionFallbackLogged = false;
                 }
                 return result;
             }
-            lastReliableFenshot = null;
-            if (!fenshotFallbackLogged) {
+            lastReliableVision = null;
+            if (!visionFallbackLogged) {
                 EventLog.add(result == null
-                        ? "Fenshot chưa đọc được bàn cờ; dùng nhận diện dự phòng."
-                        : "Fenshot chưa đủ tin cậy (tối thiểu "
+                        ? "Model chưa đọc được bàn cờ; dùng nhận diện dự phòng."
+                        : "Model chưa đủ tin cậy (tối thiểu "
                                 + Math.round(result.minConfidence * 100)
                                 + "%); dùng nhận diện dự phòng.");
-                fenshotFallbackLogged = true;
+                visionFallbackLogged = true;
             }
             return result;
         } catch (Exception e) {
-            lastReliableFenshot = null;
-            if (!fenshotFallbackLogged) {
-                EventLog.add("Fenshot lỗi, dùng nhận diện dự phòng: " + e);
-                fenshotFallbackLogged = true;
+            lastReliableVision = null;
+            if (!visionFallbackLogged) {
+                EventLog.add("Model lỗi, dùng nhận diện dự phòng: " + e);
+                visionFallbackLogged = true;
             }
             return null;
         }
