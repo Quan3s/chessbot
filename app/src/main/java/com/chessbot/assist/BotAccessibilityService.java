@@ -2,6 +2,7 @@ package com.chessbot.assist;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
+import android.content.Intent;
 import android.graphics.Path;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 public class BotAccessibilityService extends AccessibilityService {
 
     private static final String TAG = "ChessBotAcc";
+    private static final long TAP_DURATION_MS = 100;
+    private static final long DRAG_DURATION_MS = 320;
     private static volatile BotAccessibilityService instance;
 
     public static BotAccessibilityService getInstance() {
@@ -47,17 +50,28 @@ public class BotAccessibilityService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        instance = null;
+        if (instance == this) {
+            instance = null;
+        }
         EventLog.add("Trợ năng: đã ngắt");
         super.onDestroy();
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        if (instance == this) {
+            instance = null;
+        }
+        EventLog.add("Trợ năng: đã ngắt kết nối");
+        return super.onUnbind(intent);
     }
 
     /** A very short tap at (x, y) in screen pixels. */
     public boolean tap(float x, float y) {
         Path p = new Path();
         p.moveTo(x, y);
-        p.lineTo(x + 1.5f, y + 1.5f);
-        return dispatchSync(p, 0, 55);
+        p.lineTo(x, y);
+        return dispatchSync(p, 0, TAP_DURATION_MS);
     }
 
     /** A drag from (x1,y1) to (x2,y2) in screen pixels. */
@@ -65,7 +79,7 @@ public class BotAccessibilityService extends AccessibilityService {
         Path p = new Path();
         p.moveTo(x1, y1);
         p.lineTo(x2, y2);
-        return dispatchSync(p, 0, 260);
+        return dispatchSync(p, 0, DRAG_DURATION_MS);
     }
 
     private boolean dispatchSync(Path path, long startDelay, long duration) {
@@ -85,23 +99,29 @@ public class BotAccessibilityService extends AccessibilityService {
                 @Override
                 public void onCancelled(GestureDescription gestureDescription) {
                     ok[0] = false;
+                    EventLog.add("Android đã hủy cử chỉ chạm/kéo.");
                     latch.countDown();
                 }
             }, new Handler(Looper.getMainLooper()));
         } catch (Throwable t) {
             Log.w(TAG, "dispatchGesture failed", t);
+            EventLog.add("Trợ năng từ chối cử chỉ: " + t.getClass().getSimpleName()
+                    + (t.getMessage() == null ? "" : " — " + t.getMessage()));
             return false;
         }
         if (!dispatched) {
+            EventLog.add("Android không nhận cử chỉ; hãy kiểm tra dịch vụ Trợ năng còn kết nối.");
             return false;
         }
         try {
             if (!latch.await(3, TimeUnit.SECONDS)) {
                 Log.w(TAG, "gesture timeout");
+                EventLog.add("Hết thời gian chờ Android xác nhận cử chỉ.");
                 return false;
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            EventLog.add("Đang chờ cử chỉ bị ngắt.");
             return false;
         }
         return ok[0];

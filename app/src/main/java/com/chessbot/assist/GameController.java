@@ -929,6 +929,7 @@ public final class GameController {
     private boolean tapMove(Move move) {
         BotAccessibilityService acc = BotAccessibilityService.getInstance();
         if (acc == null) {
+            EventLog.add("Không gửi được nước đi: dịch vụ Trợ năng chưa kết nối.");
             return false;
         }
         int[] from = squareCenter(move.getFrom());
@@ -939,9 +940,12 @@ public final class GameController {
         } else {
             ok = acc.tap(from[0], from[1]);
             if (ok) {
-                sleep(150);
+                sleep(250);
                 ok = acc.tap(to[0], to[1]);
             }
+        }
+        if (!ok) {
+            EventLog.add("Gửi thao tác cho nước " + uci(move) + " thất bại.");
         }
         if (ok && isPromotion(move)) {
             EventLog.add("Phong cấp: nếu app hỏi, hãy chọn Hậu.");
