@@ -406,10 +406,12 @@ public final class GameController {
         boolean exactModelStart = pieceRead != null && pieceRead.reliable
                 && pieceRead.plausible
                 && START_PLACEMENT.equals(pieceRead.placementFor(recognizedWhiteAtBottom));
-        boolean confidentModelStart = pieceRead != null && pieceRead.plausible
+        int modelOccupancyMatches = pieceRead == null ? 0
+                : startingOccupancyMatches(pieceRead.boardOccupancy(recognizedWhiteAtBottom));
+        boolean confidentModelStart = pieceRead != null
                 && pieceRead.minConfidence >= START_MIN_MODEL_CONFIDENCE
                 && pieceRead.meanConfidence >= START_MEAN_MODEL_CONFIDENCE
-                && isStartingOccupancy(pieceRead.boardOccupancy(recognizedWhiteAtBottom));
+                && modelOccupancyMatches == 64;
         if (exactModelStart || confidentModelStart) {
             whiteAtBottom = recognizedWhiteAtBottom;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
@@ -418,7 +420,8 @@ public final class GameController {
             }
             EventLog.add((exactModelStart
                     ? "OpenCV DNN xác nhận chính xác vị trí đầu"
-                    : "OpenCV DNN xác nhận 32 quân ở đúng hàng khai cuộc")
+                    : "OpenCV DNN xác nhận occupancy 32 quân ở đúng hàng khai cuộc"
+                            + (pieceRead.plausible ? "" : " dù phân loại loại quân chưa hợp lý"))
                     + ", độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
                     + Math.round(pieceRead.meanConfidence * 100) + "%");
@@ -431,7 +434,8 @@ public final class GameController {
             EventLog.add("OpenCV DNN không xác nhận khai cuộc: độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
                     + Math.round(pieceRead.meanConfidence * 100) + "%, thế cờ hợp lý "
-                    + (pieceRead.plausible ? "có" : "không"));
+                    + (pieceRead.plausible ? "có" : "không")
+                    + ", occupancy khai cuộc khớp " + modelOccupancyMatches + "/64 ô");
         } else {
             EventLog.add("OpenCV DNN không trả kết quả; kiểm tra nhật ký lỗi OpenCV phía trên.");
         }
@@ -484,18 +488,19 @@ public final class GameController {
         return null;
     }
 
-    private boolean isStartingOccupancy(int[] occupancy) {
+    private int startingOccupancyMatches(int[] occupancy) {
         if (occupancy == null || occupancy.length != 64) {
-            return false;
+            return 0;
         }
+        int matches = 0;
         for (int square = 0; square < 64; square++) {
             int rank = square / 8;
             boolean expectedOccupied = rank < 2 || rank >= 6;
-            if ((occupancy[square] != 0) != expectedOccupied) {
-                return false;
+            if ((occupancy[square] != 0) == expectedOccupied) {
+                matches++;
             }
         }
-        return true;
+        return matches;
     }
 
     private OpenCvChessRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {

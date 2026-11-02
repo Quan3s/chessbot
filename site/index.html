@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.14</title>
+<title>ChessBot Assist 1.5.15</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,23 +88,24 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.14</span>
+  <span class="badge">Bản 1.5.15</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.14/ChessBot-Assist-v1.5.14.apk">
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.15/ChessBot-Assist-v1.5.15.apk">
       ⬇ Tải APK (83 MB)
     </a>
     <div class="meta">
       Android 8.0 – 16 · arm64-v8a + armeabi-v7a<br>
-      SHA-256: <code>31a46214b84a5596e4005bbaf252638d56993d2fb44fd546c115813b6e499717</code>
+      SHA-256: <code>f2a15158823042f7b8c15558b39d21cf98e9b414b0786500ba0fba70f0688a80</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.14</h2>
+    <h2>Có gì mới ở 1.5.15</h2>
     <ul>
-      <li><b>Sửa lỗi 32/64 ô:</b> dùng OpenCV DNN để xác nhận vị trí khai cuộc ngay cả khi BoardReader báo nhầm toàn bộ 32 ô trống thành có quân.</li>
-      <li><b>Kiểm tra an toàn:</b> model phải nhận đủ occupancy khai cuộc, thế cờ hợp lý và confidence đủ cao; nhật ký hiển thị confidence và kết quả từng bộ nhận diện.</li>
+      <li><b>Sửa điều kiện bỏ qua OpenCV:</b> xác nhận khai cuộc dựa riêng vào occupancy, không từ chối kết quả đúng chỉ vì model đoán sai tên vua/tốt/quân khác.</li>
+      <li><b>Chẩn đoán rõ ràng:</b> nhật ký báo số ô occupancy OpenCV khớp trên 64, confidence, và liệu phân loại loại quân có hợp lý hay không.</li>
+      <li><b>Kiểm tra an toàn:</b> occupancy phải khớp chính xác 64/64 ô cùng confidence tối thiểu/trung bình đạt ngưỡng.</li>
       <li><b>Sửa nạp OpenCV native:</b> nạp đúng thư viện theo ABI từ thư mục cài đặt, kiểm tra JNI và tạo <code>Mat</code> trước khi chạy model.</li>
       <li><b>Chẩn đoán OpenCV:</b> lỗi native hiển thị rõ trong nhật ký để phân biệt với ngưỡng 26 của BoardReader dự phòng.</li>
       <li><b>Sửa khởi tạo OpenCV:</b> nạp native runtime trước khi tạo ảnh/matrix, tránh lỗi <code>Mat.n_Mat()</code> khiến DNN không chạy.</li>
@@ -133,7 +134,7 @@
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.14 dùng cùng khóa ký với bản 1.5.13; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.15 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
