@@ -25,7 +25,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
-import com.github.bhlangonijr.chesslib.Square;
+import com.github.bhlangonijr.chesslib.Board;
 
 /**
  * Foreground service that owns: the floating toggle button, the MediaProjection
@@ -63,10 +63,7 @@ public class BotService extends Service {
     private PieceTrainingOverlay trainingView;
     private boolean trainingShowing;
     private boolean trainingBusy;
-    private String trainingThemeName;
-    private int trainingOrientation;
-    private float[][] trainingMasks;
-    private float[] trainingContrasts;
+    private OpenCvChessRecognizer.Model trainingModel;
     private SidePickerOverlay sidePicker;
     private boolean sidePickerShowing;
     private long generation;
@@ -370,7 +367,8 @@ public class BotService extends Service {
         stopBot(true);
         closeSidePicker(false);
         hideFab();
-        toolMenuView = new ToolMenuOverlay(this, new ToolMenuOverlay.Callback() {
+        toolMenuView = new ToolMenuOverlay(this, PieceThemeStore.getThemes(this),
+                Prefs.getPieceThemeId(this), new ToolMenuOverlay.Callback() {
             @Override
             public void onCalibrate() {
                 closeToolMenu();
@@ -381,6 +379,21 @@ public class BotService extends Service {
             public void onTrain() {
                 closeToolMenu();
                 showTraining();
+            }
+
+            @Override
+            public void onSelectTheme(String themeId) {
+                PieceThemeStore.setSelectedId(BotService.this, themeId);
+                Prefs.setPieceThemeId(BotService.this, themeId);
+                for (PieceThemeStore.Theme theme : PieceThemeStore.getThemes(BotService.this)) {
+                    if (theme.id.equals(themeId)) {
+                        EventLog.add("Đã chọn bộ template \"" + theme.name + "\".");
+                        toast("Đã chọn bộ template " + theme.name);
+                        break;
+                    }
+                }
+                closeToolMenu();
+                showFab();
             }
 
             @Override
@@ -432,13 +445,13 @@ public class BotService extends Service {
         trainingShowing = true;
         trainingView = new PieceTrainingOverlay(this, new PieceTrainingOverlay.Callback() {
             @Override
-            public void onBegin(String themeName) {
-                beginPieceTraining(themeName);
+            public void onCapture(String themeName, int orientation) {
+                captureOpeningTemplate(themeName, orientation);
             }
 
             @Override
-            public void onCapture(int step) {
-                capturePieceTrainingSample(step);
+            public void onSave(String themeName, int orientation, int[] correctedBoard) {
+                saveOpeningTemplate(themeName, orientation, correctedBoard);
             }
 
             @Override
@@ -460,42 +473,15 @@ public class BotService extends Service {
         lp.gravity = gravity | Gravity.START;
         try {
             wm.addView(trainingView, lp);
-            EventLog.add("Bắt đầu train theme quân cờ: nhập tên, rồi làm theo 24 mẫu.");
+            EventLog.add("Tạo bộ template: chụp một ảnh khai cuộc rồi sửa bàn cờ nhận diện.");
         } catch (Throwable t) {
             EventLog.add("Không mở được màn hình train: " + t);
             closeTraining(true);
         }
     }
 
-    private void beginPieceTraining(String themeName) {
-        if (trainingView == null || capture == null) {
-            return;
-        }
-        trainingThemeName = themeName;
-        trainingMasks = new float[PieceRecognizer.CLASS_COUNT * 2][];
-        trainingContrasts = new float[PieceRecognizer.CLASS_COUNT * 2];
-        int orientationPreference = Prefs.getOrientation(this);
-        trainingOrientation = BoardOrientation.fromPreference(orientationPreference);
-        if (orientationPreference == Prefs.ORIENT_AUTO) {
-            ScreenCapture.Frame frame = capture.grab();
-            float[] rect = Prefs.getRect(this);
-            if (frame != null && rect != null) {
-                BoardReader.Result read = BoardReader.read(frame.pixels, frame.width,
-                        frame.height, rect[0], rect[1], rect[2], rect[3]);
-                trainingOrientation =
-                        BoardOrientation.inferFromScreenColors(read.screenColors());
-            }
-        }
-        trainingView.startSteps();
-        trainingView.setBusy(false);
-        EventLog.add("Train theme \"" + themeName + "\" · hướng a1 ở góc "
-                + BoardOrientation.label(trainingOrientation)
-                + " · mỗi mẫu: đặt đúng quân vào ô được yêu cầu rồi chụp.");
-    }
-
-    private void capturePieceTrainingSample(int step) {
-        if (trainingBusy || trainingView == null || trainingMasks == null
-                || step < 0 || step >= trainingMasks.length || capture == null) {
+    private void captureOpeningTemplate(String themeName, int orientation) {
+        if (trainingBusy || trainingView == null || capture == null) {
             return;
         }
         trainingBusy = true;
@@ -507,85 +493,90 @@ public class BotService extends Service {
             return;
         }
         new Thread(() -> {
+            OpenCvChessRecognizer.Model model = null;
+            OpenCvChessRecognizer.Result result = null;
+            String warning = null;
             String error = null;
-            float[] mask = null;
-            float contrast = 0f;
             try {
-                sleep(280);
+                sleep(350);
                 ScreenCapture.Frame frame = capture == null ? null : capture.grab();
                 if (frame == null) {
-                    error = "Không chụp được ảnh; thử lại.";
+                    throw new IllegalStateException("Không chụp được ảnh màn hình.");
                 } else {
-                    BoardReader.Result read = BoardReader.read(frame.pixels, frame.width,
-                            frame.height, rect[0], rect[1], rect[2], rect[3], 18, 0.02f);
-                    Square target = Square.values()[
-                            PieceTrainingOverlay.targetSquareForStep(step)];
-                    int row = BoardOrientation.screenRowForSquare(
-                            target.ordinal() / 8, target.ordinal() % 8, trainingOrientation);
-                    int col = BoardOrientation.screenColumnForSquare(
-                            target.ordinal() / 8, target.ordinal() % 8, trainingOrientation);
-                    int screenIndex = row * 8 + col;
-                    mask = PieceRecognizer.extract(frame.pixels, frame.width, frame.height,
-                            read, screenIndex);
-                    if (!PieceRecognizer.validMask(mask)) {
-                        error = "Không thấy rõ quân ở ô mẫu. Đặt quân chính giữa ô "
-                                + (PieceTrainingOverlay.darkSquareForStep(step)
-                                        ? "d4 (tối)" : "e4 (sáng)")
-                                + " rồi thử lại.";
-                    } else {
-                        BoardReader.Cell cell = read.cells[screenIndex];
-                        contrast = cell.pieceLum - cell.bgLum;
-                        if (Math.abs(contrast) < 8f) {
-                            error = "Màu quân chưa tách khỏi nền rõ. Bỏ chọn quân rồi thử lại.";
-                        }
+                    model = OpenCvChessRecognizer.train(frame.pixels, frame.width,
+                            frame.height, rect, orientation);
+                    result = OpenCvChessRecognizer.recognize(frame.pixels, frame.width,
+                            frame.height, rect, orientation, model);
+                    if (!model.occupancyReliable() || result.occupied != 32
+                            || result.unknown > 0) {
+                        warning = "Cảnh báo: occupancy khai cuộc chưa khớp rõ ("
+                                + result.occupied + "/32 quân, " + result.unknown
+                                + " ô chưa rõ). Bạn có thể sửa bàn cờ bên dưới.";
                     }
                 }
-            } catch (RuntimeException e) {
-                error = "Lỗi lấy mẫu: " + e.getMessage();
+            } catch (Exception | LinkageError e) {
+                error = "OpenCV không tạo được bộ template: " + e.getMessage();
+                EventLog.add(error);
             }
             final String resultError = error;
-            final float[] sampleMask = mask;
-            final float sampleContrast = contrast;
+            final OpenCvChessRecognizer.Model trainedModel = model;
+            final OpenCvChessRecognizer.Result detected = result;
+            final String resultWarning = warning;
             handler.post(() -> {
                 trainingBusy = false;
-                if (trainingView == null || trainingMasks == null) {
+                if (trainingView == null) {
                     return;
                 }
                 if (resultError != null) {
                     trainingView.showError(resultError);
-                    EventLog.add("Train mẫu " + (step + 1) + "/24 thất bại: " + resultError);
                     return;
                 }
-                trainingMasks[step] = sampleMask;
-                trainingContrasts[step] = sampleContrast;
-                EventLog.add("Đã lấy mẫu theme " + (step + 1) + "/24 · "
-                        + (step / 2 >= 6 ? "Đen " : "Trắng ")
-                        + "ở ô " + (step % 2 == 0 ? "tối" : "sáng"));
-                trainingView.sampleCaptured();
-                if (trainingView.isComplete()) {
-                    finishPieceTraining();
-                } else {
-                    trainingView.setBusy(false);
-                }
+                trainingModel = trainedModel;
+                trainingView.showRecognition(detected, resultWarning);
+                EventLog.add("OpenCV nhận diện ảnh train · occupancy " + detected.occupied
+                        + "/32 · ô chưa rõ " + detected.unknown + " · FEN: "
+                        + detected.toFen(true));
+                EventLog.add("Bàn cờ nhận diện:\n" + detected.describe());
             });
         }, "piece-theme-sample").start();
     }
 
-    private void finishPieceTraining() {
-        PieceRecognizer recognizer = new PieceRecognizer();
-        PieceRecognizer.LearnResult result =
-                recognizer.learnManual(trainingMasks, trainingContrasts);
-        if (!recognizer.isReady() || result.samples != PieceRecognizer.CLASS_COUNT * 2) {
-            trainingView.showError("Thiếu mẫu hợp lệ; theme chưa được lưu.");
+    private void saveOpeningTemplate(String themeName, int orientation, int[] correctedBoard) {
+        if (trainingView == null || trainingModel == null) {
+            if (trainingView != null) {
+                trainingView.showError("Chụp ảnh khai cuộc trước khi lưu.");
+            }
             return;
         }
-        PieceThemeStore.Theme theme =
-                PieceThemeStore.save(this, trainingThemeName, recognizer.saveTemplates());
+        int whiteKings = 0;
+        int blackKings = 0;
+        for (int type : correctedBoard) {
+            if (type == OpenCvChessRecognizer.TYPE_UNKNOWN) {
+                trainingView.showError("Sửa các ô ? trước khi lưu.");
+                return;
+            }
+            if (type == 5) whiteKings++;
+            else if (type == 11) blackKings++;
+        }
+        if (whiteKings != 1 || blackKings != 1) {
+            trainingView.showError("Bàn cờ cần có đúng một vua Trắng và một vua Đen.");
+            return;
+        }
+        String fen = OpenCvChessRecognizer.fenFromTypes(correctedBoard, true);
+        try {
+            Board validation = new Board();
+            validation.loadFromFen(fen);
+        } catch (RuntimeException e) {
+            trainingView.showError("FEN không hợp lệ: " + e.getMessage());
+            return;
+        }
+        PieceThemeStore.Theme theme = PieceThemeStore.save(this, themeName,
+                trainingModel.toBytes(), fen, orientation);
         Prefs.setPieceThemeId(this, theme.id);
-        EventLog.add("Đã lưu và chọn theme \"" + theme.name + "\" · "
-                + result.classes + "/12 nhóm quân · " + result.samples + "/24 mẫu.");
+        EventLog.add("Đã lưu và chọn bộ template \"" + theme.name + "\" · hướng a1 "
+                + BoardOrientation.label(orientation) + " · FEN: " + fen);
         closeTraining(true);
-        toast("Đã train và chọn theme " + theme.name);
+        toast("Đã lưu bộ template " + theme.name);
     }
 
     private void closeTraining(boolean restoreFab) {
@@ -598,9 +589,7 @@ public class BotService extends Service {
         }
         trainingShowing = false;
         trainingBusy = false;
-        trainingThemeName = null;
-        trainingMasks = null;
-        trainingContrasts = null;
+        trainingModel = null;
         if (restoreFab && prepared) {
             showFab();
         }
@@ -961,7 +950,7 @@ public class BotService extends Service {
                     Prefs.setBoardThresholds(this, bestRead.devThreshold,
                             bestRead.fillThreshold);
                 } else {
-                    msg += " — căn khung sát mép bàn cờ và mở ván mới";
+                    msg += " — kiểm tra lại crop/hướng bàn cờ; vẫn có thể tiếp tục";
                 }
                 EventLog.add("Kiểm tra hiệu chỉnh: " + msg);
                 EventLog.add("Ngưỡng BoardReader dự phòng: chênh lệch " + bestRead.devThreshold
@@ -979,15 +968,11 @@ public class BotService extends Service {
                     }
                 });
             } finally {
-                postIf(ok, onSuccess);
+                if (onSuccess != null) {
+                    handler.post(onSuccess);
+                }
             }
         }, "verify-calibration").start();
-    }
-
-    private void postIf(boolean condition, Runnable action) {
-        if (condition && action != null) {
-            handler.post(action);
-        }
     }
 
     // ------------------------------------------------------------------ notification

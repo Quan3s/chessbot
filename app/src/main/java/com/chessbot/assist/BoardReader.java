@@ -44,8 +44,8 @@ public final class BoardReader {
         public float pieceHigh;  // 85th percentile luminance of piece pixels
         public float brightRatio; // fraction of piece pixels that are bright
         public float bgLum;
-        // Background colour of this square, used by PieceRecognizer to build
-        // a shape mask that is independent of the board theme.
+        // Background colour of this square, used for theme-independent
+        // appearance comparisons.
         public int bgR = 128;
         public int bgG = 128;
         public int bgB = 128;

@@ -55,9 +55,22 @@ public final class PieceThemeStore {
         return encoded == null ? null : android.util.Base64.decode(encoded, android.util.Base64.DEFAULT);
     }
 
-    public static Theme save(Context context, String name, byte[] templates) {
+    public static String getStartFen(Context context, String id) {
+        return id == null || id.isEmpty()
+                ? null : preferences(context).getString("fen_" + id, null);
+    }
+
+    public static int getOrientation(Context context, String id) {
+        return id == null || id.isEmpty() ? BoardOrientation.A1_BOTTOM_LEFT
+                : preferences(context).getInt("orientation_" + id,
+                        BoardOrientation.A1_BOTTOM_LEFT);
+    }
+
+    public static Theme save(Context context, String name, byte[] templates,
+                             String startFen, int orientation) {
         String cleanName = name == null ? "" : name.trim();
-        if (cleanName.isEmpty() || cleanName.length() > 40 || templates == null) {
+        if (cleanName.isEmpty() || cleanName.length() > 40 || templates == null
+                || startFen == null || startFen.trim().isEmpty()) {
             throw new IllegalArgumentException("Invalid piece theme");
         }
         SharedPreferences prefs = preferences(context);
@@ -79,6 +92,8 @@ public final class PieceThemeStore {
                 .putString(THEME_IDS, String.join(",", ids))
                 .putString("name_" + id, cleanName)
                 .putString("data_" + id, encoded)
+                .putString("fen_" + id, startFen)
+                .putInt("orientation_" + id, orientation)
                 .putString(SELECTED_THEME, id)
                 .apply();
         return new Theme(id, cleanName);

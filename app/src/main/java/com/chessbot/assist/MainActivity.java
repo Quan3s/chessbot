@@ -556,11 +556,11 @@ public class MainActivity extends Activity {
                 "2. Bấm BẬT NÚT NỔI → cho phép quay màn hình.\n" +
                 "3. Mở app cờ vua, vào một ván mới (phải ở thế cờ bắt đầu).\n" +
                 "4. Giữ nút nổi để mở menu → Căn chỉnh bàn cờ → kéo khung khớp mép bàn cờ → Lưu vùng.\n" +
-                "5. Để train bộ quân: giữ nút nổi → Train bộ quân / theme, đặt tên rồi làm theo hướng dẫn. " +
-                "Mỗi nhóm quân cần chụp trên ô tối và ô sáng; nên dùng bàn phân tích/chỉnh thế cờ để đặt quân.\n" +
-                "6. Chọn theme đã lưu trong Cài đặt. Bấm ▶ → chọn Trắng/Đen để bắt đầu ván mới.\n" +
+                "5. Để train: giữ nút nổi → Train bộ template, đặt tên, chọn Trắng dưới/trên rồi chụp một ảnh khai cuộc. " +
+                "Kiểm tra bàn cờ nhận diện, chạm ô sai để sửa và lưu.\n" +
+                "6. Chọn bộ template đã lưu ngay trong menu giữ nút nổi. Bấm ▶ → chọn Trắng/Đen để bắt đầu.\n" +
                 "7. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
-                "Lưu ý: bot bắt đầu từ thế cờ chuẩn và theo dõi các nước đi hợp lệ. Nếu ảnh quân không rõ, " +
+                "Lưu ý: occupancy không khớp khai cuộc chỉ hiện cảnh báo, không chặn chạy. Nếu nước đi không rõ, " +
                 "bot sẽ chờ thay vì đoán bừa. Nếu app hỏi phong cấp, hãy chọn Hậu. Nút nổi nên đặt ngoài vùng bàn cờ.");
     }
 

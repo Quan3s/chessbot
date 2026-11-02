@@ -22,13 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * by matching every visible board change against the legal moves of the side
  * to move. This works without knowing the piece set or board theme.
  *
- * <p>Since 1.4 there is a second, optional layer: {@link PieceRecognizer}
- * learns the 12 piece shapes from the standard starting position and then
- * classifies the pieces on later frames. That extra evidence is only trusted
- * when it is unambiguous. It resolves the one case occupancy alone cannot —
- * which piece a promotion turned into — and can break ties between two
- * identical-looking captures. If recognition is unsure, the controller uses
- * the old occupancy matching exactly as before.</p>
+ * <p>Saved OpenCV templates classify pieces on each frame. Legal-move matching
+ * remains the guard for synchronizing the visible board.</p>
  */
 public final class GameController {
 
@@ -40,7 +35,6 @@ public final class GameController {
 
     private static final String START_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
 
     private final Context ctx;
     private final ScreenCapture capture;
@@ -53,14 +47,15 @@ public final class GameController {
     private final int movetime;
     private final int skill;
     private final AtomicBoolean finished = new AtomicBoolean(false);
-    private final PieceRecognizer recognizer = new PieceRecognizer();
+    private final OpenCvChessRecognizer.Model templateModel;
+    private final String savedStartFen;
 
     private volatile boolean running;
     private Thread thread;
     private int a1Position = BoardOrientation.A1_BOTTOM_LEFT;
     private Side botSide = Side.WHITE;
     private int tapMode;
-    /** True only when the shape templates were learned and self-checked. */
+    /** True when a saved OpenCV theme is available. */
     private boolean typedReady;
 
     public GameController(Context ctx, ScreenCapture capture, int screenW, int screenH,
@@ -76,14 +71,17 @@ public final class GameController {
         this.skill = Prefs.getSkill(ctx);
         this.tapMode = Prefs.getTapMode(ctx);
         this.engine = new StockfishEngine(StockfishCatalog.resolveEnginePath(ctx));
-        byte[] selectedTemplates = PieceThemeStore.getTemplates(
-                ctx, Prefs.getPieceThemeId(ctx));
+        String themeId = Prefs.getPieceThemeId(ctx);
+        byte[] selectedTemplates = PieceThemeStore.getTemplates(ctx, themeId);
+        templateModel = OpenCvChessRecognizer.Model.fromBytes(selectedTemplates);
+        savedStartFen = PieceThemeStore.getStartFen(ctx, themeId);
         if (selectedTemplates != null) {
-            typedReady = recognizer.loadTemplates(selectedTemplates);
+            typedReady = templateModel != null;
             if (!typedReady) {
-                EventLog.add("Theme quân đã chọn bị lỗi dữ liệu; cần train lại.");
+                EventLog.add("Bộ template đã chọn không hợp lệ; hãy train lại.");
             } else {
-                EventLog.add("Đã nạp theme quân \"" + selectedThemeName(ctx) + "\".");
+                a1Position = PieceThemeStore.getOrientation(ctx, themeId);
+                EventLog.add("Đã nạp bộ template \"" + selectedThemeName(ctx) + "\".");
             }
         }
     }
@@ -157,9 +155,9 @@ public final class GameController {
                         rect[0], rect[1], rect[2], rect[3],
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
                 int[] readerGrid = res.boardOccupancy(a1Position);
-                PieceRecognizer.Recognized typedRead = typedReady
-                        ? recognizer.classifyBoard(frame.pixels, frame.width, frame.height,
-                                res, a1Position)
+                OpenCvChessRecognizer.Result typedRead = typedReady
+                        ? OpenCvChessRecognizer.recognize(frame.pixels, frame.width,
+                                frame.height, rect, a1Position, templateModel)
                         : null;
                 int[] grid = typedRead == null ? readerGrid : occupancyFrom(typedRead);
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
@@ -244,7 +242,8 @@ public final class GameController {
                             if (typedMove != null && !typedMove.equals(move)) {
                                 EventLog.add("Nhận diện quân xác nhận: " + uci(typedMove)
                                         + " · tin cậy "
-                                        + Math.round(PieceRecognizer.averageConfidence(typedRead) * 100)
+                                        + Math.round(OpenCvChessRecognizer.Result
+                                                .averageConfidence(typedRead) * 100)
                                         + "%");
                                 move = typedMove;
                             }
@@ -377,57 +376,49 @@ public final class GameController {
         EventLog.add("Ngưỡng BoardReader dự phòng: chênh lệch " + startRead.devThreshold
                 + " · diện tích " + Math.round(startRead.fillThreshold * 100) + "%");
 
-        board.clear();
-        board.loadFromFen(START_FEN);
         int orient = Prefs.getOrientation(ctx);
         int selectedOrientation = BoardOrientation.fromPreference(orient);
         if (typedReady) {
-            int bestOrientation = selectedOrientation;
-            int bestPieceMatches = -1;
-            PieceRecognizer.Recognized bestRead = null;
-            int firstOrientation = orient == Prefs.ORIENT_AUTO
-                    ? BoardOrientation.A1_BOTTOM_LEFT : selectedOrientation;
-            int lastOrientation = orient == Prefs.ORIENT_AUTO
-                    ? BoardOrientation.A1_TOP_RIGHT : selectedOrientation;
-            for (int candidate = firstOrientation; candidate <= lastOrientation; candidate++) {
-                PieceRecognizer.Recognized typed =
-                        recognizer.classifyBoard(frame.pixels, frame.width, frame.height,
-                                res, candidate);
-                int matches = startingPieceMatches(typed);
-                if (matches > bestPieceMatches) {
-                    bestPieceMatches = matches;
-                    bestOrientation = candidate;
-                    bestRead = typed;
-                }
+            a1Position = PieceThemeStore.getOrientation(ctx, Prefs.getPieceThemeId(ctx));
+            botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
+            OpenCvChessRecognizer.Result recognized = OpenCvChessRecognizer.recognize(
+                    frame.pixels, frame.width, frame.height, rect, a1Position, templateModel);
+            int occupancyMatches = startingOccupancyMatches(occupancyFrom(recognized));
+            EventLog.add("OpenCV nhận diện bàn cờ: occupancy khai cuộc "
+                    + occupancyMatches + "/64 · " + recognized.unknown
+                    + " ô chưa rõ · " + BoardOrientation.label(a1Position));
+            EventLog.add("Bàn cờ nhận diện:\n" + recognized.describe());
+            EventLog.add("FEN nhận diện: " + recognized.toFen(true));
+            if (occupancyMatches != 64) {
+                EventLog.add("Cảnh báo: occupancy khác khai cuộc; tiếp tục dùng bàn cờ "
+                        + "đã nhận diện hoặc FEN đã sửa trong bộ template.");
             }
-            int occupancyMatches = bestRead == null ? 0
-                    : startingOccupancyMatches(occupancyFrom(bestRead));
-            if (bestRead != null && occupancyMatches >= 60 && bestPieceMatches >= 24) {
-                a1Position = bestOrientation;
-                botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
-                if (startRead.isValid()) {
-                    Prefs.setBoardThresholds(ctx, startRead.devThreshold,
-                            startRead.fillThreshold);
-                }
-                EventLog.add("Theme nhận diện khai cuộc: occupancy " + occupancyMatches
-                        + "/64 · loại/màu " + bestPieceMatches + "/32 · "
-                        + BoardOrientation.label(a1Position));
-                EventLog.add("Bàn cờ theo theme:\n" + recognizer.describe(bestRead));
-                return null;
+            try {
+                board.clear();
+                board.loadFromFen(savedStartFen);
+            } catch (RuntimeException e) {
+                EventLog.add("FEN đã sửa không hợp lệ; dùng vị trí khai cuộc: " + e.getMessage());
+                board.clear();
+                board.loadFromFen(START_FEN);
             }
-            return "Theme \"" + selectedThemeName(ctx) + "\" chưa khớp bàn khai cuộc "
-                    + "(occupancy " + occupancyMatches + "/64, loại/màu "
-                    + bestPieceMatches + "/32). Train lại theme hoặc chọn đúng theme.";
+            EventLog.add("FEN bắt đầu đã hiệu chỉnh: " + board.getFen());
+            if (!startRead.isValid()) {
+                EventLog.add("Cảnh báo: BoardReader không xác nhận được occupancy khai cuộc; "
+                        + "OpenCV tiếp tục.");
+            }
+            return null;
         }
 
+        board.clear();
+        board.loadFromFen(START_FEN);
         int mismatch = startRead.mismatch;
         int occ = startRead.occupied;
         EventLog.add("Kiểm tra vị trí đầu: " + startRead.falsePositives
                 + " ô trống nhận nhầm thành có quân, " + startRead.missedPieces
                 + " quân bị bỏ sót; đúng " + (64 - mismatch) + "/64 ô");
         if (!startRead.isValid()) {
-            return "Không nhận diện rõ bàn cờ. Hãy train và chọn bộ quân phù hợp "
-                    + "hoặc căn khung sát mép bàn cờ.";
+            EventLog.add("Cảnh báo: occupancy BoardReader không khớp khai cuộc; "
+                    + "tiếp tục với vị trí mặc định.");
         }
 
         a1Position = orient == Prefs.ORIENT_AUTO
@@ -438,33 +429,7 @@ public final class GameController {
 
         Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
-        learnPieces(frame, res, occ == 32 && mismatch == 0);
         return null;
-    }
-
-    private int startingPieceMatches(PieceRecognizer.Recognized recognized) {
-        if (recognized == null) {
-            return 0;
-        }
-        int matches = 0;
-        for (Square square : Square.values()) {
-            if (square == Square.NONE) {
-                continue;
-            }
-            Piece expected = board.getPiece(square);
-            if (expected == null || expected == Piece.NONE) {
-                continue;
-            }
-            int index = square.ordinal();
-            int expectedType = expected.ordinal() % 6;
-            int expectedColor = expected.ordinal() < 6
-                    ? BoardReader.WHITE : BoardReader.BLACK;
-            if (recognized.type[index] == expectedType
-                    && recognized.color[index] == expectedColor) {
-                matches++;
-            }
-        }
-        return matches;
     }
 
     private int startingOccupancyMatches(int[] occupancy) {
@@ -481,10 +446,11 @@ public final class GameController {
         return matches;
     }
 
-    private int[] occupancyFrom(PieceRecognizer.Recognized recognized) {
+    private int[] occupancyFrom(OpenCvChessRecognizer.Result recognized) {
         int[] occupancy = new int[64];
         for (int square = 0; square < occupancy.length; square++) {
-            occupancy[square] = recognized.type[square] == PieceRecognizer.TYPE_EMPTY ? 0 : 1;
+            occupancy[square] = recognized.type[square] == OpenCvChessRecognizer.TYPE_EMPTY
+                    ? 0 : 1;
         }
         return occupancy;
     }
@@ -546,96 +512,6 @@ public final class GameController {
         StartFrame(ScreenCapture.Frame frame, BoardReader.StartRead read) {
             this.frame = frame;
             this.read = read;
-        }
-    }
-
-    /**
-     * Learn the 12 piece shapes from the standard starting position, where
-     * every piece is already labelled by the known FEN. The learned templates
-     * are only used if a self-check on the same frame classifies almost all
-     * pieces correctly; otherwise the controller stays on the old occupancy
-     * matching.
-     */
-    private void learnPieces(ScreenCapture.Frame frame, BoardReader.Result res,
-                             boolean exactStartingPosition) {
-        typedReady = false;
-        if (!exactStartingPosition) {
-            EventLog.add("Vị trí đầu chưa khớp đủ 64 ô để học bộ quân — dùng cách cũ.");
-            return;
-        }
-        int[] classByScreen = new int[64];
-        Arrays.fill(classByScreen, -1);
-        int total = 0;
-        int observed = 0;
-        for (Square s : Square.values()) {
-            if (s == Square.NONE) {
-                continue;
-            }
-            Piece p = board.getPiece(s);
-            if (p == null || p == Piece.NONE) {
-                continue;
-            }
-            total++;
-            int idx = screenIndex(s);
-            if (!res.cells[idx].occupied) {
-                continue;
-            }
-            classByScreen[idx] = p.ordinal();
-            observed++;
-        }
-        if (total != 32 || observed != 32) {
-            EventLog.add("Không đủ 32 quân đúng vị trí đầu để học hình (" + observed
-                    + "/32) — dùng cách cũ.");
-            return;
-        }
-        PieceRecognizer.LearnResult lr = recognizer.learn(
-                frame.pixels, frame.width, frame.height, res, classByScreen);
-        if (!recognizer.isReady()) {
-            EventLog.add("Không học đủ bộ quân (" + lr.classes
-                    + "/12 loại) — dùng cách cũ.");
-            return;
-        }
-
-        PieceRecognizer.Recognized rec = recognizer.classifyBoard(
-                frame.pixels, frame.width, frame.height, res, a1Position);
-        int typeOk = 0;
-        int colorOk = 0;
-        for (Square s : Square.values()) {
-            if (s == Square.NONE) {
-                continue;
-            }
-            Piece p = board.getPiece(s);
-            if (p == null || p == Piece.NONE) {
-                continue;
-            }
-            int i = s.ordinal();
-            if (rec.type[i] == p.ordinal() % 6) {
-                typeOk++;
-            }
-            int expColor = p.ordinal() < 6 ? BoardReader.WHITE : BoardReader.BLACK;
-            if (rec.color[i] == expColor) {
-                colorOk++;
-            }
-        }
-        int minTypes = Math.max(27, total - 3);
-        typedReady = lr.classes == PieceRecognizer.CLASS_COUNT
-                && lr.samples == 32
-                && observed == 32
-                && typeOk >= minTypes
-                && colorOk >= minTypes;
-
-        EventLog.add("Học bộ quân: " + lr.classes + "/12 loại · " + lr.samples
-                + " mẫu · tự kiểm tra loại " + typeOk + "/" + total
-                + ", màu " + colorOk + "/" + total
-                + (typedReady ? " → bật nhận diện" : " → tắt (dùng cách cũ)"));
-        if (lr.detail != null && lr.detail.length() > 0) {
-            EventLog.add("Mẫu/loại: " + lr.detail);
-        }
-        EventLog.add("Bàn cờ nhận diện:\n" + recognizer.describe(rec));
-        if (typedReady) {
-            EventLog.add("Nhận diện quân: "
-                    + Math.round(PieceRecognizer.averageConfidence(rec) * 100)
-                    + "% tin cậy trung bình — chỉ dùng khi rõ ràng.");
         }
     }
 
@@ -741,7 +617,7 @@ public final class GameController {
      * moves that have the same occupancy image (including underpromotion).
      * Any uncertain square leaves the existing occupancy-only path in charge.
      */
-    private Move chooseTypedMove(int[] observed, PieceRecognizer.Recognized rec) {
+    private Move chooseTypedMove(int[] observed, OpenCvChessRecognizer.Result rec) {
         if (rec == null || rec.occupied == 0
                 || rec.knownTypes != rec.occupied
                 || rec.knownColors != rec.occupied) {
@@ -764,7 +640,7 @@ public final class GameController {
                 int index = square.ordinal();
                 Piece piece = candidate.getPiece(square);
                 if (piece == null || piece == Piece.NONE) {
-                    if (rec.type[index] != PieceRecognizer.TYPE_EMPTY) {
+                    if (rec.type[index] != OpenCvChessRecognizer.TYPE_EMPTY) {
                         matchesPieces = false;
                         break;
                     }

@@ -8,7 +8,10 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+
+import java.util.List;
 
 /** Actions opened by holding the floating button. */
 public final class ToolMenuOverlay extends FrameLayout {
@@ -16,10 +19,12 @@ public final class ToolMenuOverlay extends FrameLayout {
     public interface Callback {
         void onCalibrate();
         void onTrain();
+        void onSelectTheme(String themeId);
         void onClose();
     }
 
-    public ToolMenuOverlay(Context context, Callback callback) {
+    public ToolMenuOverlay(Context context, List<PieceThemeStore.Theme> themes,
+                           String selectedId, Callback callback) {
         super(context);
         setBackgroundColor(0x99000000);
         setClickable(true);
@@ -40,7 +45,7 @@ public final class ToolMenuOverlay extends FrameLayout {
         card.addView(title, matchWrap());
 
         Button calibrate = makeButton(context, "Căn chỉnh bàn cờ");
-        Button train = makeButton(context, "Train bộ quân / theme");
+        Button train = makeButton(context, "Train bộ template");
         LinearLayout.LayoutParams buttonLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
         buttonLp.topMargin = dp(10);
@@ -49,6 +54,43 @@ public final class ToolMenuOverlay extends FrameLayout {
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
         trainLp.topMargin = dp(7);
         card.addView(train, trainLp);
+
+        TextView listTitle = new TextView(context);
+        listTitle.setText("Bộ template đã lưu");
+        listTitle.setTextColor(0xFFEDEFF5);
+        listTitle.setTextSize(14);
+        listTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        LinearLayout.LayoutParams listTitleLp = matchWrap();
+        listTitleLp.topMargin = dp(12);
+        card.addView(listTitle, listTitleLp);
+
+        ScrollView scroll = new ScrollView(context);
+        LinearLayout themeList = new LinearLayout(context);
+        themeList.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(themeList, new ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams listLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(180));
+        card.addView(scroll, listLp);
+        if (themes == null || themes.isEmpty()) {
+            TextView empty = new TextView(context);
+            empty.setText("Chưa có bộ template. Bấm Train để tạo.");
+            empty.setTextColor(0xFF9AA1B2);
+            empty.setTextSize(13);
+            empty.setPadding(dp(4), dp(10), dp(4), dp(10));
+            themeList.addView(empty, matchWrap());
+        } else {
+            for (PieceThemeStore.Theme theme : themes) {
+                Button item = makeButton(context,
+                        (theme.id.equals(selectedId) ? "✓  " : "") + theme.name);
+                item.setTextSize(13);
+                LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(42));
+                itemLp.topMargin = dp(3);
+                themeList.addView(item, itemLp);
+                item.setOnClickListener(v -> callback.onSelectTheme(theme.id));
+            }
+        }
 
         TextView close = new TextView(context);
         close.setText("Đóng");
