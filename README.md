@@ -8,7 +8,7 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.13.apk`.
+APK sau khi build: `build/ChessBot-Assist-v1.5.14.apk`.
 
 **Bản 1.5.7:** quay về ngưỡng nhận diện gốc của v1.5.2 làm lựa chọn đầu tiên, đồng thời thử thêm các ngưỡng tương phản rộng hơn khi cần. Nhật ký nay ghi rõ số ô trống bị nhận nhầm, số quân bị bỏ sót và thông báo lỗi cũng nêu đúng hai loại sai lệch này.
 
@@ -24,11 +24,13 @@ APK sau khi build: `build/ChessBot-Assist-v1.5.13.apk`.
 
 **Bản 1.5.13:** nạp trực tiếp OpenCV native library từ thư mục ABI đã cài của app, kiểm tra JNI `Core` và khởi tạo `Mat` trước khi bắt đầu nhận diện. Nếu native binding còn lỗi, ghi rõ lỗi trong nhật ký thay vì chỉ thấy BoardReader dùng ngưỡng 26.
 
+**Bản 1.5.14:** xác nhận bàn khai cuộc bằng occupancy của OpenCV DNN, không bắt buộc BoardReader cũng phải nhận diện được. Chấp nhận khi đủ 32 ô quân nằm trên đúng hai hàng đầu/cuối, model hợp lý và confidence tối thiểu/trung bình đạt ngưỡng; log ghi rõ kết quả của model và BoardReader.
+
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.13.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.14.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
@@ -184,7 +186,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.13.apk
+# -> build/ChessBot-Assist-v1.5.14.apk
 ```
 
 Script chạy tuần tự: tải/xác minh OpenCV Android 4.10.0 → `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + model → `zipalign` → `apksigner`. OpenCV DNN và model chạy offline trên CPU; không dùng ONNX Runtime Web hoặc WebView cho nhận diện.

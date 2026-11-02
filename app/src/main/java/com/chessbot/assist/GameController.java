@@ -41,6 +41,8 @@ public final class GameController {
     private static final String START_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
+    private static final float START_MIN_MODEL_CONFIDENCE = 0.25f;
+    private static final float START_MEAN_MODEL_CONFIDENCE = 0.90f;
     private static final long RECOGNITION_INTERVAL_MS = 600;
 
     private final Context ctx;
@@ -401,20 +403,38 @@ public final class GameController {
         boolean recognizedWhiteAtBottom = orient == Prefs.ORIENT_WHITE_BOTTOM
                 || (orient == Prefs.ORIENT_AUTO && pieceRead != null
                         && pieceRead.whiteAtBottom);
-        if (pieceRead != null && pieceRead.reliable && pieceRead.plausible
-                && START_PLACEMENT.equals(pieceRead.placementFor(recognizedWhiteAtBottom))) {
+        boolean exactModelStart = pieceRead != null && pieceRead.reliable
+                && pieceRead.plausible
+                && START_PLACEMENT.equals(pieceRead.placementFor(recognizedWhiteAtBottom));
+        boolean confidentModelStart = pieceRead != null && pieceRead.plausible
+                && pieceRead.minConfidence >= START_MIN_MODEL_CONFIDENCE
+                && pieceRead.meanConfidence >= START_MEAN_MODEL_CONFIDENCE
+                && isStartingOccupancy(pieceRead.boardOccupancy(recognizedWhiteAtBottom));
+        if (exactModelStart || confidentModelStart) {
             whiteAtBottom = recognizedWhiteAtBottom;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
             if (startRead.isValid()) {
                 Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
             }
-            EventLog.add("OpenCV DNN xác nhận vị trí đầu, độ tin cậy tối thiểu "
-                    + Math.round(pieceRead.minConfidence * 100) + "%");
+            EventLog.add((exactModelStart
+                    ? "OpenCV DNN xác nhận chính xác vị trí đầu"
+                    : "OpenCV DNN xác nhận 32 quân ở đúng hàng khai cuộc")
+                    + ", độ tin cậy tối thiểu "
+                    + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
+                    + Math.round(pieceRead.meanConfidence * 100) + "%");
             return null;
         }
 
         int mismatch = startRead.mismatch;
         int occ = startRead.occupied;
+        if (pieceRead != null) {
+            EventLog.add("OpenCV DNN không xác nhận khai cuộc: độ tin cậy tối thiểu "
+                    + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
+                    + Math.round(pieceRead.meanConfidence * 100) + "%, thế cờ hợp lý "
+                    + (pieceRead.plausible ? "có" : "không"));
+        } else {
+            EventLog.add("OpenCV DNN không trả kết quả; kiểm tra nhật ký lỗi OpenCV phía trên.");
+        }
         EventLog.add("Kiểm tra vị trí đầu: " + startRead.falsePositives
                 + " ô trống nhận nhầm là có quân, " + startRead.missedPieces
                 + " quân bị bỏ sót; đúng " + (64 - mismatch) + "/64 ô");
@@ -462,6 +482,20 @@ public final class GameController {
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
         learnPieces(frame, res, occ == 32 && mismatch == 0);
         return null;
+    }
+
+    private boolean isStartingOccupancy(int[] occupancy) {
+        if (occupancy == null || occupancy.length != 64) {
+            return false;
+        }
+        for (int square = 0; square < 64; square++) {
+            int rank = square / 8;
+            boolean expectedOccupied = rank < 2 || rank >= 6;
+            if ((occupancy[square] != 0) != expectedOccupied) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private OpenCvChessRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
