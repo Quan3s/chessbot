@@ -54,7 +54,7 @@ public class BotService extends Service {
     private MediaProjection projection;
     private ScreenCapture capture;
     private GameController controller;
-    private ChessVisionRecognizer chessVisionRecognizer;
+    private OpenCvChessRecognizer chessVisionRecognizer;
     private boolean prepared;
     private boolean calibrationShowing;
     private View calibrationView;
@@ -483,7 +483,7 @@ public class BotService extends Service {
         if (cal != null) {
             moveFabOutsideBoard(cal[0], cal[1], cal[2], cal[3]);
         }
-        ChessVisionRecognizer recognizer = getChessVisionRecognizer();
+        OpenCvChessRecognizer recognizer = getChessVisionRecognizer();
         final long gen = ++generation;
         final GameController c = new GameController(this, capture, recognizer, screenW, screenH,
                 new GameController.Listener() {
@@ -520,20 +520,20 @@ public class BotService extends Service {
         c.start();
     }
 
-    private ChessVisionRecognizer getChessVisionRecognizer() {
+    private OpenCvChessRecognizer getChessVisionRecognizer() {
         if (chessVisionRecognizer != null) {
             return chessVisionRecognizer;
         }
         try {
-            chessVisionRecognizer = new ChessVisionRecognizer(this, wm);
+            chessVisionRecognizer = new OpenCvChessRecognizer(this);
         } catch (RuntimeException e) {
-            EventLog.add("Không khởi tạo được model cờ; dùng nhận diện dự phòng: " + e);
+            EventLog.add("Không khởi tạo được bộ nhận diện OpenCV: " + e);
         }
         return chessVisionRecognizer;
     }
 
     private void releaseChessVisionRecognizer() {
-        ChessVisionRecognizer recognizer = chessVisionRecognizer;
+        OpenCvChessRecognizer recognizer = chessVisionRecognizer;
         chessVisionRecognizer = null;
         if (recognizer != null) {
             recognizer.close();

@@ -45,7 +45,7 @@ public final class GameController {
 
     private final Context ctx;
     private final ScreenCapture capture;
-    private final ChessVisionRecognizer chessVision;
+    private final OpenCvChessRecognizer chessVision;
     private final Listener listener;
     private final Board board = new Board();
     private final StockfishEngine engine;
@@ -67,9 +67,9 @@ public final class GameController {
     private boolean visionFallbackLogged;
     private long lastVisionScanAt;
     private long lastReliableVisionAt;
-    private ChessVisionRecognizer.Result lastReliableVision;
+    private OpenCvChessRecognizer.Result lastReliableVision;
 
-    public GameController(Context ctx, ScreenCapture capture, ChessVisionRecognizer chessVision,
+    public GameController(Context ctx, ScreenCapture capture, OpenCvChessRecognizer chessVision,
                           int screenW, int screenH,
                           Listener listener) {
         this.ctx = ctx;
@@ -156,7 +156,7 @@ public final class GameController {
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
                 int[] readerGrid = res.boardOccupancy(whiteAtBottom);
                 long now = SystemClock.elapsedRealtime();
-                ChessVisionRecognizer.Result pieceRead = null;
+                OpenCvChessRecognizer.Result pieceRead = null;
                 if (now - lastVisionScanAt >= RECOGNITION_INTERVAL_MS) {
                     pieceRead = recognizeWithChessVision(frame);
                 } else if (lastReliableVision != null
@@ -396,7 +396,7 @@ public final class GameController {
 
         board.clear();
         board.loadFromFen(START_FEN);
-        ChessVisionRecognizer.Result pieceRead = recognizeWithChessVision(frame);
+        OpenCvChessRecognizer.Result pieceRead = recognizeWithChessVision(frame);
         int orient = Prefs.getOrientation(ctx);
         boolean recognizedWhiteAtBottom = orient == Prefs.ORIENT_WHITE_BOTTOM
                 || (orient == Prefs.ORIENT_AUTO && pieceRead != null
@@ -406,7 +406,7 @@ public final class GameController {
             whiteAtBottom = recognizedWhiteAtBottom;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
             Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
-            EventLog.add("Model xác nhận vị trí đầu, độ tin cậy tối thiểu "
+            EventLog.add("OpenCV DNN xác nhận vị trí đầu, độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%");
             return null;
         }
@@ -462,18 +462,18 @@ public final class GameController {
         return null;
     }
 
-    private ChessVisionRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
+    private OpenCvChessRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
         if (chessVision == null) {
             return null;
         }
         lastVisionScanAt = SystemClock.elapsedRealtime();
         try {
-            ChessVisionRecognizer.Result result = chessVision.recognize(frame, rect);
+            OpenCvChessRecognizer.Result result = chessVision.recognize(frame, rect);
             if (result != null && result.reliable && result.plausible) {
                 lastReliableVision = result;
                 lastReliableVisionAt = lastVisionScanAt;
                 if (visionFallbackLogged) {
-                    EventLog.add("Model nhận diện ổn định trở lại");
+                    EventLog.add("OpenCV DNN nhận diện ổn định trở lại");
                     visionFallbackLogged = false;
                 }
                 return result;
@@ -481,8 +481,8 @@ public final class GameController {
             lastReliableVision = null;
             if (!visionFallbackLogged) {
                 EventLog.add(result == null
-                        ? "Model chưa đọc được bàn cờ; dùng nhận diện dự phòng."
-                        : "Model chưa đủ tin cậy (tối thiểu "
+                        ? "OpenCV chưa đọc được bàn cờ; dùng nhận diện dự phòng."
+                        : "OpenCV chưa đủ tin cậy (tối thiểu "
                                 + Math.round(result.minConfidence * 100)
                                 + "%); dùng nhận diện dự phòng.");
                 visionFallbackLogged = true;
@@ -491,7 +491,7 @@ public final class GameController {
         } catch (Exception e) {
             lastReliableVision = null;
             if (!visionFallbackLogged) {
-                EventLog.add("Model lỗi, dùng nhận diện dự phòng: " + e);
+                EventLog.add("OpenCV lỗi, dùng nhận diện dự phòng: " + e);
                 visionFallbackLogged = true;
             }
             return null;

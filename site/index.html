@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.10</title>
+<title>ChessBot Assist 1.5.11</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,21 +88,24 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.10</span>
+  <span class="badge">Bản 1.5.11</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.10/ChessBot-Assist-v1.5.10.apk">
-      ⬇ Tải APK (70 MB)
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.11/ChessBot-Assist-v1.5.11.apk">
+      ⬇ Tải APK (83 MB)
     </a>
     <div class="meta">
       Android 8.0 – 16 · arm64-v8a + armeabi-v7a<br>
-      SHA-256: <code>8974591db91db36d8cee297a1eeda67753e8dc00576eda8dad987bff3f0cc346</code>
+      SHA-256: <code>22bdcc27b694b5fded8337957db42521bd025e24d8c820d96fb3a783c4a65f76</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.10</h2>
+    <h2>Có gì mới ở 1.5.11</h2>
     <ul>
+      <li><b>Chuyển sang OpenCV Android DNN:</b> OpenCV xử lý ảnh và chạy CNN trên CPU ngay trong ứng dụng; bỏ ONNX Runtime Web và WebView nhận diện.</li>
+      <li><b>Phân loại toàn bàn:</b> model đọc loại và màu quân trên 64 ô mỗi lần quét, không phụ thuộc việc bộ nhận diện cũ có phát hiện bàn đổi hay không.</li>
+      <li><b>Chạy hoàn toàn offline:</b> ảnh không rời khỏi thiết bị; bot chỉ dùng thế cờ tin cậy và khớp luật.</li>
       <li><b>Sửa gửi thao tác chạm/kéo:</b> cử chỉ có thời lượng ổn định hơn; nhật ký phân biệt Android từ chối, hủy hoặc không phản hồi.</li>
       <li><b>Kiểm tra kết nối Trợ năng:</b> trạng thái dịch vụ được xóa đúng lúc Android ngắt kết nối.</li>
       <li><b>Model OpenCV-Chess-Bot:</b> nhận diện loại quân và màu quân trên cả 64 ô, kể cả trong thế cờ giữa ván; chạy hoàn toàn offline.</li>
@@ -124,12 +127,12 @@
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.10 dùng cùng khóa ký với bản 1.5.9; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.11 dùng cùng khóa ký với bản 1.5.10; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
     <div class="note">
-      <b>Nhận diện bàn cờ chạy offline.</b> Model phân loại loại quân/màu quân trên 64 ô. Bot chỉ dùng kết quả đủ tin cậy và khớp với nước đi hợp lệ; nếu không chắc, bot quay về cách nhận diện trước hoặc chờ, không đoán bừa.
+      <b>Nhận diện bàn cờ chạy offline bằng OpenCV DNN.</b> OpenCV xử lý ảnh và chạy model phân loại quân trên 64 ô ngay trên thiết bị. Bot chỉ dùng kết quả đủ tin cậy và khớp với nước đi hợp lệ; nếu không chắc, bot dùng bộ đọc dự phòng hoặc chờ, không đoán bừa.
     </div>
   </div>
 

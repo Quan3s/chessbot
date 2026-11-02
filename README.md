@@ -8,7 +8,7 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.10.apk`.
+APK sau khi build: `build/ChessBot-Assist-v1.5.11.apk`.
 
 **Bản 1.5.7:** quay về ngưỡng nhận diện gốc của v1.5.2 làm lựa chọn đầu tiên, đồng thời thử thêm các ngưỡng tương phản rộng hơn khi cần. Nhật ký nay ghi rõ số ô trống bị nhận nhầm, số quân bị bỏ sót và thông báo lỗi cũng nêu đúng hai loại sai lệch này.
 
@@ -18,16 +18,18 @@ APK sau khi build: `build/ChessBot-Assist-v1.5.10.apk`.
 
 **Bản 1.5.10:** cải thiện gửi thao tác chạm/kéo qua Trợ năng, dọn trạng thái kết nối dịch vụ khi Android ngắt, và ghi rõ lý do cử chỉ bị từ chối, hủy hoặc hết thời gian chờ.
 
+**Bản 1.5.11:** chuyển hẳn phần xử lý ảnh và suy luận sang OpenCV Android DNN 4.10.0. OpenCV chạy CNN ONNX phân loại 64 ô trực tiếp trên CPU; bỏ ONNX Runtime Web và WebView nhận diện. Bot vẫn quét định kỳ và chỉ đồng bộ nước đi hợp lệ.
+
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.10.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.11.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
 
-APK là **universal**: một file chứa cả hai bộ máy, Android tự chọn đúng ABI. Dung lượng lớn là do mỗi bộ Stockfish tĩnh khoảng 40 MB.
+APK là **universal**: một file chứa cả hai bộ máy cùng thư viện OpenCV cho arm64-v8a và armeabi-v7a; Android tự chọn đúng ABI.
 
 > **Cài từ bản ChessBot ký bằng khóa khác:** Android không thể cập nhật đè. Gỡ bản cũ trước khi cài APK này; việc gỡ ứng dụng sẽ xóa cài đặt và vùng bàn cờ đã lưu.
 
@@ -168,21 +170,20 @@ MediaProjection (0.5×) ──> BoardReader ──> lưới 8×8 có quân / tr�
 Yêu cầu:
 
 - JDK 21 (`javac`, `keytool`)
-- Node.js 20+ / npm (để bundle model OpenCV-Chess-Bot và ONNX Runtime)
+- `curl`, `unzip`, `sha256sum` (tải và xác minh OpenCV Android 4.10.0, checksum được ghim trong `build.sh`)
 - Android SDK platform 35 + build-tools 35.0.0 (mặc định `/opt/android-sdk`, hoặc đặt `ANDROID_SDK_ROOT`)
 - `libs/chesslib-1.3.3.jar`
 - `app/src/main/jniLibs/arm64-v8a/libstockfish.so` và `.../armeabi-v7a/libstockfish.so` (Stockfish 16 mặc định, binary tĩnh)
 
 ```bash
 cd chessbot
-cd recognition/opencv-chess-bot && npm ci && npm run build && cd ../..
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.10.apk
+# -> build/ChessBot-Assist-v1.5.11.apk
 ```
 
-Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` → `zipalign` → `apksigner`. Không dùng Gradle nên build được trên máy ít RAM.
+Script chạy tuần tự: tải/xác minh OpenCV Android 4.10.0 → `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + model → `zipalign` → `apksigner`. OpenCV DNN và model chạy offline trên CPU; không dùng ONNX Runtime Web hoặc WebView cho nhận diện.
 
 APK cần ký bằng keystore riêng. Trong bản build phát hành này, `keystore.jks` và mật khẩu nằm cục bộ trong `.release-signing.env` (được `.gitignore` loại khỏi Git); hãy sao lưu **cả hai** ở nơi an toàn. Mất keystore sẽ khiến các bản cập nhật sau không thể cài đè APK này. Có thể đặt `CHESSBOT_KEYSTORE`, `CHESSBOT_KEY_ALIAS`, `CHESSBOT_STORE_PASS` và `CHESSBOT_KEY_PASS` để dùng keystore khác.
 
@@ -191,14 +192,15 @@ Cấu trúc chính:
 ```
 chessbot/
 ├── build.sh                     # build APK thủ công
-├── recognition/opencv-chess-bot/# model phân loại quân offline
 ├── libs/chesslib-1.3.3.jar      # luật cờ vua
 └── app/src/main/
     ├── AndroidManifest.xml
+    ├── assets/opencv/           # ONNX model + giấy phép
     ├── java/com/chessbot/assist/
     │   ├── MainActivity.java            # UI, quyền, cài đặt, nhật ký
     │   ├── BotService.java              # foreground service, nút nổi, hiệu chỉnh
     │   ├── GameController.java          # vòng lặp bot, so khớp nước đi
+    │   ├── OpenCvChessRecognizer.java   # OpenCV DNN, xử lý ảnh và model
     │   ├── BoardReader.java             # đọc lưới ô có quân / trống
     │   ├── ScreenCapture.java           # MediaProjection 0.5×
     │   ├── StockfishEngine.java         # UCI wrapper
