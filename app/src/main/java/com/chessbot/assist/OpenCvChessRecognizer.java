@@ -167,9 +167,11 @@ public final class OpenCvChessRecognizer {
                     float[] rowValues = new float[CLASS_COUNT];
                     for (int row = 0; row < 64; row++) {
                         int read = rows.get(row, 0, rowValues);
-                        if (read != CLASS_COUNT) {
+                        int expectedBytes = rowValues.length * Float.BYTES;
+                        if (read != expectedBytes) {
                             throw new IOException("Could not read OpenCV classifier output row "
-                                    + row + ": read " + read + " of " + CLASS_COUNT + " values");
+                                    + row + ": read " + read + " bytes; expected "
+                                    + expectedBytes);
                         }
                         System.arraycopy(rowValues, 0, values, row * CLASS_COUNT, CLASS_COUNT);
                     }
