@@ -159,9 +159,22 @@ public final class OpenCvChessRecognizer {
                     throw new IOException("Unexpected OpenCV classifier output shape");
                 }
                 values = new float[64 * CLASS_COUNT];
-                int read = logits.get(0, 0, values);
-                if (read != values.length) {
-                    throw new IOException("Could not read all OpenCV classifier outputs");
+                Mat rows = logits.reshape(1, 64);
+                try {
+                    if (rows.cols() != CLASS_COUNT || rows.type() != CvType.CV_32F) {
+                        throw new IOException("Unexpected reshaped OpenCV classifier output");
+                    }
+                    float[] rowValues = new float[CLASS_COUNT];
+                    for (int row = 0; row < 64; row++) {
+                        int read = rows.get(row, 0, rowValues);
+                        if (read != CLASS_COUNT) {
+                            throw new IOException("Could not read OpenCV classifier output row "
+                                    + row + ": read " + read + " of " + CLASS_COUNT + " values");
+                        }
+                        System.arraycopy(rowValues, 0, values, row * CLASS_COUNT, CLASS_COUNT);
+                    }
+                } finally {
+                    rows.release();
                 }
             }
             return decode(values);

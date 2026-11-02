@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.15</title>
+<title>ChessBot Assist 1.5.16</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,21 +88,24 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.15</span>
+  <span class="badge">Bản 1.5.16</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.15/ChessBot-Assist-v1.5.15.apk">
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.16/ChessBot-Assist-v1.5.16.apk">
       ⬇ Tải APK (83 MB)
     </a>
     <div class="meta">
       Android 8.0 – 16 · arm64-v8a + armeabi-v7a<br>
-      SHA-256: <code>f2a15158823042f7b8c15558b39d21cf98e9b414b0786500ba0fba70f0688a80</code>
+      SHA-256: <code>5a296016b56146f578a40ed06523a7d41547f101d65aa4cf041b0b9b1bc2d853</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.15</h2>
+    <h2>Có gì mới ở 1.5.16</h2>
     <ul>
+      <li><b>Sửa OpenCV không đọc đủ output:</b> tách tensor thành 64 hàng và lấy đủ điểm số cho từng ô; không còn loại kết quả vì chỉ đọc được hàng đầu tiên.</li>
+      <li><b>Chẩn đoán chi tiết:</b> nếu đọc tensor vẫn thất bại, nhật ký ghi hàng nào và số giá trị thực tế đọc được.</li>
+      <li><b>Giữ sửa occupancy 1.5.15:</b> không yêu cầu model phân loại đúng tên quân nếu occupancy và confidence khớp.</li>
       <li><b>Sửa điều kiện bỏ qua OpenCV:</b> xác nhận khai cuộc dựa riêng vào occupancy, không từ chối kết quả đúng chỉ vì model đoán sai tên vua/tốt/quân khác.</li>
       <li><b>Chẩn đoán rõ ràng:</b> nhật ký báo số ô occupancy OpenCV khớp trên 64, confidence, và liệu phân loại loại quân có hợp lý hay không.</li>
       <li><b>Kiểm tra an toàn:</b> occupancy phải khớp chính xác 64/64 ô cùng confidence tối thiểu/trung bình đạt ngưỡng.</li>
@@ -134,7 +137,7 @@
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.15 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.16 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
