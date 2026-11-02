@@ -3,8 +3,8 @@ package com.chessbot.assist;
 import android.content.Context;
 import android.graphics.Bitmap;
 
-import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfByte;
@@ -16,6 +16,7 @@ import org.opencv.dnn.Net;
 import org.opencv.imgproc.Imgproc;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -183,12 +184,19 @@ public final class OpenCvChessRecognizer {
         if (sharedNet != null) {
             return sharedNet;
         }
+        File nativeLibrary = new File(context.getApplicationInfo().nativeLibraryDir,
+                "libopencv_java4.so");
+        if (!nativeLibrary.isFile()) {
+            throw new IOException("OpenCV native library not found: " + nativeLibrary);
+        }
         try {
-            if (!OpenCVLoader.initLocal()) {
-                throw new IOException("Could not load OpenCV Android runtime");
-            }
-        } catch (UnsatisfiedLinkError e) {
-            throw new IOException("OpenCV native library is unavailable for this device", e);
+            System.load(nativeLibrary.getAbsolutePath());
+            Core.getBuildInformation();
+            Mat probe = new Mat();
+            probe.release();
+        } catch (UnsatisfiedLinkError | UnsupportedOperationException e) {
+            throw new IOException("OpenCV native library failed JNI initialization: "
+                    + nativeLibrary, e);
         }
 
         byte[] model;
