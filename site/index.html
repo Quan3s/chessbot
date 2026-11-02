@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.20</title>
+<title>ChessBot Assist 1.5.21</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,12 +88,12 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.20</span>
+  <span class="badge">Bản 1.5.21</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.20/ChessBot-Assist-v1.5.20.apk">
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.21/ChessBot-Assist-v1.5.21.apk">
       ⬇ Tải APK
     </a>
     <div class="meta">
@@ -101,26 +101,23 @@
       SHA-256: <code>fbebfeac0f12e8ae990e897ff2110ed5be08adf4c3eddb29cc14554831063725</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.20</h2>
+    <h2>Có gì mới ở 1.5.21</h2>
     <ul>
-      <li><b>LiveChess2FEN MobileNetV2:</b> model ONNX 224×224 RGB chính thức phân loại 64 ô, chạy hoàn toàn offline.</li>
-      <li><b>Cắt thủ công:</b> chỉ vùng bàn cờ đã hiệu chỉnh được chia ô và gửi vào model; không dùng dò bàn cờ toàn màn hình hoặc OpenCV.</li>
-      <li><b>Dùng thế cờ trước:</b> đối chiếu xác suất model với các nước hợp lệ để giải quyết ô phân loại nhầm, chỉ đi khi có kết quả rõ ràng.</li>
-      <li><b>Hướng bàn:</b> tự nhận diện hoặc chọn góc a1; hỗ trợ xoay 90° và 180° cho nhận diện và thao tác đi quân.</li>
-      <li><b>Giấy phép:</b> kèm AGPL-3.0, ghi công LiveChess2FEN và giấy phép ONNX Runtime trong mã nguồn và APK.</li>
-      <li><b>Khôi phục khai cuộc:</b> nếu model nhận diện đủ gần vị trí đầu, vẫn khởi động và dùng xác suất occupancy cùng nước đi hợp lệ khi phân loại loại quân sai.</li>
-      <li><b>Giảm quét lặp:</b> chờ sau mỗi lần chạy model, tránh gọi ONNX liên tục khi inference trên điện thoại mất nhiều giây.</li>
+      <li><b>Menu nút nổi:</b> giữ nút để chọn căn chỉnh bàn cờ hoặc train bộ quân.</li>
+      <li><b>Train theo theme:</b> chụp 24 mẫu cho 12 nhóm quân Trắng/Đen, trên cả ô tối và ô sáng.</li>
+      <li><b>Lưu nhiều theme:</b> đặt tên theme, lưu cục bộ và chọn bộ quân phù hợp trong Cài đặt.</li>
+      <li><b>Nhận diện theo mẫu:</b> bỏ ONNX; so khớp hình quân của theme đã train và xác nhận nước đi theo luật.</li>
     </ul>
 
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.20 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.21 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
     <div class="note">
-      <b>Nhận diện bàn cờ chạy offline bằng ONNX Runtime.</b> Model LiveChess2FEN chỉ nhận vùng bàn cờ đã hiệu chỉnh, phân loại 64 ô rồi đối chiếu thế cờ trước và luật cờ. Kết quả không đủ tin cậy thì bot chờ hoặc dùng bộ đọc dự phòng, không đoán bừa.
+      <b>Nhận diện bàn cờ chạy offline bằng theme đã train trên thiết bị.</b> Mỗi theme lưu hình mẫu quân theo màu và loại, lấy từ ô sáng/tối; bot chỉ nhận nước đi khớp luật cờ.
     </div>
   </div>
 

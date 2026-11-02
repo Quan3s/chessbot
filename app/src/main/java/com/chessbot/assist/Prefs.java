@@ -123,6 +123,14 @@ public final class Prefs {
         get(c).edit().putInt("engine_hash_mb", Math.max(0, v)).apply();
     }
 
+    public static String getPieceThemeId(Context c) {
+        return PieceThemeStore.getSelectedId(c);
+    }
+
+    public static void setPieceThemeId(Context c, String id) {
+        PieceThemeStore.setSelectedId(c, id);
+    }
+
     public static int getBoardDevThreshold(Context c) {
         return get(c).getInt("board_dev_threshold", 26);
     }

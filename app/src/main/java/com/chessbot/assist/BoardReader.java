@@ -471,27 +471,19 @@ public final class BoardReader {
         }
 
         out.fill = total == 0 ? 0f : dev / (float) total;
+        if (dev > 0) {
+            out.pieceLum = percentile(lumHist, dev, 0.50f);
+            out.pieceHigh = percentile(lumHist, dev, 0.85f);
+            out.brightRatio = bright / (float) dev;
+            float diff = out.pieceLum - out.bgLum;
+            out.color = diff > 14 ? WHITE : diff < -14 ? BLACK : UNKNOWN;
+        }
         if (out.fill < fillThreshold || dev == 0) {
             out.occupied = false;
-            out.color = EMPTY;
-            out.pieceLum = 0;
-            out.pieceHigh = 0;
             return;
         }
 
         out.occupied = true;
-        out.pieceLum = percentile(lumHist, dev, 0.50f);
-        out.pieceHigh = percentile(lumHist, dev, 0.85f);
-        out.brightRatio = bright / (float) dev;
-
-        float diff = out.pieceLum - out.bgLum;
-        if (diff > 14) {
-            out.color = WHITE;
-        } else if (diff < -14) {
-            out.color = BLACK;
-        } else {
-            out.color = UNKNOWN;
-        }
     }
 
     private static int percentile(int[] hist, int total, float p) {

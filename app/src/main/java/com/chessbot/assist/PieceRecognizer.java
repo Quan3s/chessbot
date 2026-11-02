@@ -5,12 +5,8 @@ import java.util.Arrays;
 /**
  * Recognises the <b>type</b> and <b>colour</b> of the piece on each square.
  *
- * <p>Piece sets are not known in advance, so the recognizer does not ship with
- * images. It learns one shape template per piece from the standard starting
- * position the first time the bot starts: every square already has a known
- * piece there, so 32 labelled samples are available for free. From then on it
- * extracts a background-independent shape mask from each occupied square and
- * compares it with the learned templates.</p>
+ * <p>Piece sets are not known in advance. A template can be learned from the
+ * standard starting position or from manually captured, labelled samples.</p>
  *
  * <p>The mask is built from the per-square background colour estimated by
  * {@link BoardReader}, then contrast-normalised per square. That makes it work
@@ -93,6 +89,96 @@ public final class PieceRecognizer {
 
     public int learnedSamples() {
         return learnedSamples;
+    }
+
+    public LearnResult learnManual(float[][] sampleMasks, float[] sampleContrasts) {
+        LearnResult out = new LearnResult();
+        if (sampleMasks == null || sampleContrasts == null
+                || sampleMasks.length != CLASS_COUNT * 2
+                || sampleContrasts.length != sampleMasks.length) {
+            return out;
+        }
+        Arrays.fill(templates, null);
+        Arrays.fill(templateFill, 0f);
+        Arrays.fill(templateColorContrast, 0f);
+        Arrays.fill(classSamples, 0);
+        learnedClasses = 0;
+        learnedSamples = 0;
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            float[] first = sampleMasks[cls * 2];
+            float[] second = sampleMasks[cls * 2 + 1];
+            if (!validMask(first) || !validMask(second)
+                    || !Float.isFinite(sampleContrasts[cls * 2])
+                    || !Float.isFinite(sampleContrasts[cls * 2 + 1])) {
+                continue;
+            }
+            float[] template = new float[GRID * GRID];
+            for (int i = 0; i < template.length; i++) {
+                template[i] = (first[i] + second[i]) * 0.5f;
+            }
+            templates[cls] = template;
+            templateFill[cls] = mean(template);
+            templateColorContrast[cls] =
+                    (sampleContrasts[cls * 2] + sampleContrasts[cls * 2 + 1]) * 0.5f;
+            classSamples[cls] = 2;
+            learnedClasses++;
+            learnedSamples += 2;
+        }
+        out.classes = learnedClasses;
+        out.samples = learnedSamples;
+        out.occupied = learnedSamples;
+        return out;
+    }
+
+    public byte[] saveTemplates() {
+        byte[] data = new byte[8 + CLASS_COUNT * GRID * GRID + CLASS_COUNT * 2];
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(data)
+                .order(java.nio.ByteOrder.BIG_ENDIAN);
+        buffer.putInt(0x50435448);
+        buffer.putInt(1);
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            if (templates[cls] == null) {
+                throw new IllegalStateException("Cannot save an incomplete piece theme");
+            }
+            for (float value : templates[cls]) {
+                buffer.put((byte) Math.round(Math.max(0f, Math.min(1f, value)) * 255f));
+            }
+        }
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            buffer.putShort((short) Math.round(templateColorContrast[cls] * 100f));
+        }
+        return data;
+    }
+
+    public boolean loadTemplates(byte[] data) {
+        int expectedLength = 8 + CLASS_COUNT * GRID * GRID + CLASS_COUNT * 2;
+        if (data == null || data.length != expectedLength) {
+            return false;
+        }
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(data)
+                .order(java.nio.ByteOrder.BIG_ENDIAN);
+        if (buffer.getInt() != 0x50435448 || buffer.getInt() != 1) {
+            return false;
+        }
+        float[][] loaded = new float[CLASS_COUNT][GRID * GRID];
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            for (int i = 0; i < loaded[cls].length; i++) {
+                loaded[cls][i] = (buffer.get() & 255) / 255f;
+            }
+        }
+        float[] contrasts = new float[CLASS_COUNT];
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            contrasts[cls] = buffer.getShort() / 100f;
+        }
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            templates[cls] = loaded[cls];
+            templateFill[cls] = mean(loaded[cls]);
+            templateColorContrast[cls] = contrasts[cls];
+            classSamples[cls] = 2;
+        }
+        learnedClasses = CLASS_COUNT;
+        learnedSamples = CLASS_COUNT * 2;
+        return true;
     }
 
     /**
@@ -194,15 +280,15 @@ public final class PieceRecognizer {
                 int screen = sr * 8 + sc;
                 int board = rank * 8 + file;
                 BoardReader.Cell cell = res.cells[screen];
-                if (!cell.occupied) {
+                float[] mask = extract(px, w, h, res, screen);
+                float fill = mean(mask);
+                if (fill < MIN_FILL || fill > 0.90f) {
                     out.type[board] = TYPE_EMPTY;
                     out.color[board] = BoardReader.EMPTY;
                     continue;
                 }
                 out.occupied++;
-                float[] mask = extract(px, w, h, res, screen);
-                float fill = mean(mask);
-                if (fill < MIN_FILL) {
+                if (learnedClasses != CLASS_COUNT) {
                     out.type[board] = TYPE_UNKNOWN;
                     out.color[board] = cell.color;
                     continue;
@@ -231,48 +317,42 @@ public final class PieceRecognizer {
                                float[] confidence, int boardIndex) {
         float best = -2f;
         float second = -2f;
-        int bestType = TYPE_UNKNOWN;
+        int bestClass = TYPE_UNKNOWN;
 
-        for (int type = 0; type < 6; type++) {
-            float typeScore = -2f;
-            for (int variant = 0; variant < 2; variant++) {
-                int cls = type + variant * 6;
-                if (templates[cls] == null) {
-                    continue;
-                }
-                float s = bestNcc(mask, templates[cls]);
-                float templateContrast = templateColorContrast[cls];
-                if (Math.abs(colorContrast) >= 14f && Math.abs(templateContrast) >= 14f) {
-                    boolean sameColor = Math.signum(colorContrast)
-                            == Math.signum(templateContrast);
-                    s = s * 0.85f + (sameColor ? 0.15f : -0.15f);
-                }
-                if (s > typeScore) {
-                    typeScore = s;
-                }
+        for (int cls = 0; cls < CLASS_COUNT; cls++) {
+            if (templates[cls] == null) {
+                continue;
             }
-            if (typeScore > best) {
+            float score = bestNcc(mask, templates[cls]);
+            float templateContrast = templateColorContrast[cls];
+            if (Math.abs(colorContrast) >= 14f && Math.abs(templateContrast) >= 14f) {
+                boolean sameColor = Math.signum(colorContrast)
+                        == Math.signum(templateContrast);
+                score = score * 0.85f + (sameColor ? 0.15f : -0.15f);
+            }
+            if (score > best) {
                 second = best;
-                best = typeScore;
-                bestType = type;
-            } else if (typeScore > second) {
-                second = typeScore;
+                best = score;
+                bestClass = cls;
+            } else if (score > second) {
+                second = score;
             }
         }
 
         if (best < MIN_SCORE || best - second < MIN_MARGIN) {
-            bestType = TYPE_UNKNOWN;
+            bestClass = TYPE_UNKNOWN;
         }
         if (confidence != null && boardIndex >= 0 && boardIndex < confidence.length) {
             confidence[boardIndex] = best;
         }
-
-        int color = cellColor;
-        if (color != BoardReader.WHITE && color != BoardReader.BLACK) {
+        int type = bestClass == TYPE_UNKNOWN ? TYPE_UNKNOWN : bestClass % 6;
+        int color = bestClass == TYPE_UNKNOWN ? cellColor
+                : bestClass < 6 ? BoardReader.WHITE : BoardReader.BLACK;
+        if (bestClass == TYPE_UNKNOWN && color != BoardReader.WHITE && color != BoardReader.BLACK) {
             color = colorContrast > 14f ? BoardReader.WHITE
                     : colorContrast < -14f ? BoardReader.BLACK : BoardReader.UNKNOWN;
         }
-        return new int[]{bestType, color};
+        return new int[]{type, color};
     }
 
     /** Human-readable board, always from White's side (rank 8 at the top). */
@@ -350,6 +430,7 @@ public final class PieceRecognizer {
 
         int[] hist = new int[256];
         int total = GRID * GRID;
+        int foreground = 0;
         for (int gy = 0; gy < GRID; gy++) {
             for (int gx = 0; gx < GRID; gx++) {
                 float u = INNER_IN + (gx + 0.5f) / GRID * (INNER_OUT - INNER_IN);
@@ -382,6 +463,9 @@ public final class PieceRecognizer {
                 if (d > 255) d = 255;
                 mask[gy * GRID + gx] = d;
                 hist[d]++;
+                if (d >= 18) {
+                    foreground++;
+                }
             }
         }
 
@@ -390,6 +474,10 @@ public final class PieceRecognizer {
         // stops a highlighted square from washing the mask out.
         int low = percentile(hist, total, 0.20f);
         int high = percentile(hist, total, 0.92f);
+        if (foreground < total * MIN_FILL || high < 20) {
+            Arrays.fill(mask, 0f);
+            return mask;
+        }
         float range = Math.max(12f, high - low);
         for (int i = 0; i < mask.length; i++) {
             float v = (mask[i] - low) / range;
@@ -457,6 +545,14 @@ public final class PieceRecognizer {
             return -2f;
         }
         return (float) (cov / Math.sqrt(va * vb));
+    }
+
+    public static boolean validMask(float[] mask) {
+        if (mask == null || mask.length != GRID * GRID) {
+            return false;
+        }
+        float fill = mean(mask);
+        return Float.isFinite(fill) && fill >= MIN_FILL && fill <= 0.90f;
     }
 
     private static float mean(float[] v) {

@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     private Button btnCopyLog;
     private Spinner spSide;
     private Spinner spOrient;
+    private Spinner spPieceTheme;
     private Spinner spTap;
     private Spinner spEngine;
     private Spinner spThreads;
@@ -84,6 +85,7 @@ public class MainActivity extends Activity {
         btnCopyLog = findViewById(R.id.btnCopyLog);
         spSide = findViewById(R.id.spSide);
         spOrient = findViewById(R.id.spOrient);
+        spPieceTheme = findViewById(R.id.spPieceTheme);
         spTap = findViewById(R.id.spTap);
         spEngine = findViewById(R.id.spEngine);
         spThreads = findViewById(R.id.spThreads);
@@ -99,6 +101,7 @@ public class MainActivity extends Activity {
         tvHelp = findViewById(R.id.tvHelp);
 
         setupSpinners();
+        setupPieceThemeSpinner();
         setupSeekBars();
         setupButtons();
         setupEngineDownload();
@@ -222,6 +225,36 @@ public class MainActivity extends Activity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 Prefs.setHashMb(MainActivity.this, hashValues.get(position));
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void setupPieceThemeSpinner() {
+        List<PieceThemeStore.Theme> themes = PieceThemeStore.getThemes(this);
+        List<String> labels = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
+        labels.add("Không dùng");
+        ids.add("");
+        for (PieceThemeStore.Theme theme : themes) {
+            labels.add(theme.name);
+            ids.add(theme.id);
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spPieceTheme.setAdapter(adapter);
+        String selected = PieceThemeStore.getSelectedId(this);
+        int position = ids.indexOf(selected);
+        spPieceTheme.setSelection(position < 0 ? 0 : position);
+        spPieceTheme.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int selectedPosition,
+                                       long id) {
+                PieceThemeStore.setSelectedId(MainActivity.this, ids.get(selectedPosition));
             }
 
             @Override
@@ -522,15 +555,13 @@ public class MainActivity extends Activity {
                 "1. Cấp quyền “Nút nổi trên app khác” và “Trợ năng”.\n" +
                 "2. Bấm BẬT NÚT NỔI → cho phép quay màn hình.\n" +
                 "3. Mở app cờ vua, vào một ván mới (phải ở thế cờ bắt đầu).\n" +
-                "4. Giữ nút nổi khoảng 0,5 giây → kéo 4 góc cho khung khớp mép bàn cờ → " +
-                "chọn “Bạn cầm quân” ngay trong khung → Lưu vùng.\n" +
-                "5. Nếu đã hiệu chỉnh rồi: bấm ▶ → chọn Trắng/Đen cho ván này.\n" +
-                "6. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
-                "Lưu ý: bot bắt đầu từ thế cờ chuẩn và bám theo từng nước đi, nên phải bật từ đầu ván. " +
-                "Từ thế cờ này, app học hình của đủ 12 loại quân trong bộ/theme đang dùng rồi nhận diện " +
-                "các khung hình sau. Nước nhận diện vẫn phải hợp lệ theo luật cờ; nếu hình quân không rõ, " +
-                "app dùng cách so ô cũ hoặc chờ, không đoán bừa. Nếu app hỏi phong cấp, hãy chọn Hậu. " +
-                "Nút nổi nên đặt ngoài vùng bàn cờ.");
+                "4. Giữ nút nổi để mở menu → Căn chỉnh bàn cờ → kéo khung khớp mép bàn cờ → Lưu vùng.\n" +
+                "5. Để train bộ quân: giữ nút nổi → Train bộ quân / theme, đặt tên rồi làm theo hướng dẫn. " +
+                "Mỗi nhóm quân cần chụp trên ô tối và ô sáng; nên dùng bàn phân tích/chỉnh thế cờ để đặt quân.\n" +
+                "6. Chọn theme đã lưu trong Cài đặt. Bấm ▶ → chọn Trắng/Đen để bắt đầu ván mới.\n" +
+                "7. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
+                "Lưu ý: bot bắt đầu từ thế cờ chuẩn và theo dõi các nước đi hợp lệ. Nếu ảnh quân không rõ, " +
+                "bot sẽ chờ thay vì đoán bừa. Nếu app hỏi phong cấp, hãy chọn Hậu. Nút nổi nên đặt ngoài vùng bàn cờ.");
     }
 
     private void requestPrepare() {

@@ -25,6 +25,8 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import com.github.bhlangonijr.chesslib.Square;
+
 /**
  * Foreground service that owns: the floating toggle button, the MediaProjection
  * capture session and the bot loop.
@@ -54,10 +56,17 @@ public class BotService extends Service {
     private MediaProjection projection;
     private ScreenCapture capture;
     private GameController controller;
-    private OnnxChessRecognizer chessVisionRecognizer;
     private boolean prepared;
     private boolean calibrationShowing;
     private View calibrationView;
+    private ToolMenuOverlay toolMenuView;
+    private PieceTrainingOverlay trainingView;
+    private boolean trainingShowing;
+    private boolean trainingBusy;
+    private String trainingThemeName;
+    private int trainingOrientation;
+    private float[][] trainingMasks;
+    private float[] trainingContrasts;
     private SidePickerOverlay sidePicker;
     private boolean sidePickerShowing;
     private long generation;
@@ -117,6 +126,8 @@ public class BotService extends Service {
         instance = null;
         stopBot(false);
         closeSidePicker(false);
+        closeToolMenu();
+        closeTraining(false);
         releaseProjection();
         hideFab();
         if (calibrationView != null) {
@@ -217,7 +228,7 @@ public class BotService extends Service {
             showFab();
             updateNotification("Sẵn sàng — nhấn ▶ để chọn màu quân và chạy");
             EventLog.add("Đã bật nút nổi (" + screenW + "×" + screenH + ")");
-            toast("Đã bật nút nổi. Mở app cờ vua, giữ nút để hiệu chỉnh.");
+            toast("Đã bật nút nổi. Giữ nút để căn chỉnh bàn cờ hoặc train theme.");
         } catch (Throwable t) {
             prepared = false;
             releaseProjection();
@@ -296,7 +307,7 @@ public class BotService extends Service {
             @Override
             public void run() {
                 longFired = true;
-                showCalibration();
+                showToolMenu();
             }
         };
 
@@ -349,6 +360,249 @@ public class BotService extends Service {
                 default:
                     return false;
             }
+        }
+    }
+
+    private void showToolMenu() {
+        if (!prepared || capture == null || toolMenuView != null) {
+            return;
+        }
+        stopBot(true);
+        closeSidePicker(false);
+        hideFab();
+        toolMenuView = new ToolMenuOverlay(this, new ToolMenuOverlay.Callback() {
+            @Override
+            public void onCalibrate() {
+                closeToolMenu();
+                showCalibration();
+            }
+
+            @Override
+            public void onTrain() {
+                closeToolMenu();
+                showTraining();
+            }
+
+            @Override
+            public void onClose() {
+                closeToolMenu();
+                showFab();
+            }
+        });
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.START;
+        try {
+            wm.addView(toolMenuView, lp);
+        } catch (Throwable t) {
+            EventLog.add("Không mở được menu nút nổi: " + t);
+            closeToolMenu();
+            showFab();
+        }
+    }
+
+    private void closeToolMenu() {
+        if (toolMenuView != null) {
+            try {
+                wm.removeView(toolMenuView);
+            } catch (Throwable ignored) {
+            }
+            toolMenuView = null;
+        }
+    }
+
+    private void showTraining() {
+        if (!prepared || capture == null) {
+            toast("Hãy bật nút nổi trước khi train");
+            showFab();
+            return;
+        }
+        if (!Prefs.hasCalibration(this)) {
+            toast("Hãy căn chỉnh bàn cờ trước khi train");
+            showCalibration();
+            return;
+        }
+        stopBot(true);
+        hideFab();
+        trainingShowing = true;
+        trainingView = new PieceTrainingOverlay(this, new PieceTrainingOverlay.Callback() {
+            @Override
+            public void onBegin(String themeName) {
+                beginPieceTraining(themeName);
+            }
+
+            @Override
+            public void onCapture(int step) {
+                capturePieceTrainingSample(step);
+            }
+
+            @Override
+            public void onCancel() {
+                closeTraining(true);
+            }
+        });
+        float[] rect = Prefs.getRect(this);
+        float above = rect == null ? 0f : rect[1] * screenH;
+        float below = rect == null ? screenH : (1f - rect[3]) * screenH;
+        int gravity = above >= below ? Gravity.TOP : Gravity.BOTTOM;
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = gravity | Gravity.START;
+        try {
+            wm.addView(trainingView, lp);
+            EventLog.add("Bắt đầu train theme quân cờ: nhập tên, rồi làm theo 24 mẫu.");
+        } catch (Throwable t) {
+            EventLog.add("Không mở được màn hình train: " + t);
+            closeTraining(true);
+        }
+    }
+
+    private void beginPieceTraining(String themeName) {
+        if (trainingView == null || capture == null) {
+            return;
+        }
+        trainingThemeName = themeName;
+        trainingMasks = new float[PieceRecognizer.CLASS_COUNT * 2][];
+        trainingContrasts = new float[PieceRecognizer.CLASS_COUNT * 2];
+        int orientationPreference = Prefs.getOrientation(this);
+        trainingOrientation = BoardOrientation.fromPreference(orientationPreference);
+        if (orientationPreference == Prefs.ORIENT_AUTO) {
+            ScreenCapture.Frame frame = capture.grab();
+            float[] rect = Prefs.getRect(this);
+            if (frame != null && rect != null) {
+                BoardReader.Result read = BoardReader.read(frame.pixels, frame.width,
+                        frame.height, rect[0], rect[1], rect[2], rect[3]);
+                trainingOrientation =
+                        BoardOrientation.inferFromScreenColors(read.screenColors());
+            }
+        }
+        trainingView.startSteps();
+        trainingView.setBusy(false);
+        EventLog.add("Train theme \"" + themeName + "\" · hướng a1 ở góc "
+                + BoardOrientation.label(trainingOrientation)
+                + " · mỗi mẫu: đặt đúng quân vào ô được yêu cầu rồi chụp.");
+    }
+
+    private void capturePieceTrainingSample(int step) {
+        if (trainingBusy || trainingView == null || trainingMasks == null
+                || step < 0 || step >= trainingMasks.length || capture == null) {
+            return;
+        }
+        trainingBusy = true;
+        trainingView.setBusy(true);
+        final float[] rect = Prefs.getRect(this);
+        if (rect == null) {
+            trainingBusy = false;
+            trainingView.showError("Căn chỉnh bàn cờ trước rồi thử lại.");
+            return;
+        }
+        new Thread(() -> {
+            String error = null;
+            float[] mask = null;
+            float contrast = 0f;
+            try {
+                sleep(280);
+                ScreenCapture.Frame frame = capture == null ? null : capture.grab();
+                if (frame == null) {
+                    error = "Không chụp được ảnh; thử lại.";
+                } else {
+                    BoardReader.Result read = BoardReader.read(frame.pixels, frame.width,
+                            frame.height, rect[0], rect[1], rect[2], rect[3], 18, 0.02f);
+                    Square target = Square.values()[
+                            PieceTrainingOverlay.targetSquareForStep(step)];
+                    int row = BoardOrientation.screenRowForSquare(
+                            target.ordinal() / 8, target.ordinal() % 8, trainingOrientation);
+                    int col = BoardOrientation.screenColumnForSquare(
+                            target.ordinal() / 8, target.ordinal() % 8, trainingOrientation);
+                    int screenIndex = row * 8 + col;
+                    mask = PieceRecognizer.extract(frame.pixels, frame.width, frame.height,
+                            read, screenIndex);
+                    if (!PieceRecognizer.validMask(mask)) {
+                        error = "Không thấy rõ quân ở ô mẫu. Đặt quân chính giữa ô "
+                                + (PieceTrainingOverlay.darkSquareForStep(step)
+                                        ? "d4 (tối)" : "e4 (sáng)")
+                                + " rồi thử lại.";
+                    } else {
+                        BoardReader.Cell cell = read.cells[screenIndex];
+                        contrast = cell.pieceLum - cell.bgLum;
+                        if (Math.abs(contrast) < 8f) {
+                            error = "Màu quân chưa tách khỏi nền rõ. Bỏ chọn quân rồi thử lại.";
+                        }
+                    }
+                }
+            } catch (RuntimeException e) {
+                error = "Lỗi lấy mẫu: " + e.getMessage();
+            }
+            final String resultError = error;
+            final float[] sampleMask = mask;
+            final float sampleContrast = contrast;
+            handler.post(() -> {
+                trainingBusy = false;
+                if (trainingView == null || trainingMasks == null) {
+                    return;
+                }
+                if (resultError != null) {
+                    trainingView.showError(resultError);
+                    EventLog.add("Train mẫu " + (step + 1) + "/24 thất bại: " + resultError);
+                    return;
+                }
+                trainingMasks[step] = sampleMask;
+                trainingContrasts[step] = sampleContrast;
+                EventLog.add("Đã lấy mẫu theme " + (step + 1) + "/24 · "
+                        + (step / 2 >= 6 ? "Đen " : "Trắng ")
+                        + "ở ô " + (step % 2 == 0 ? "tối" : "sáng"));
+                trainingView.sampleCaptured();
+                if (trainingView.isComplete()) {
+                    finishPieceTraining();
+                } else {
+                    trainingView.setBusy(false);
+                }
+            });
+        }, "piece-theme-sample").start();
+    }
+
+    private void finishPieceTraining() {
+        PieceRecognizer recognizer = new PieceRecognizer();
+        PieceRecognizer.LearnResult result =
+                recognizer.learnManual(trainingMasks, trainingContrasts);
+        if (!recognizer.isReady() || result.samples != PieceRecognizer.CLASS_COUNT * 2) {
+            trainingView.showError("Thiếu mẫu hợp lệ; theme chưa được lưu.");
+            return;
+        }
+        PieceThemeStore.Theme theme =
+                PieceThemeStore.save(this, trainingThemeName, recognizer.saveTemplates());
+        Prefs.setPieceThemeId(this, theme.id);
+        EventLog.add("Đã lưu và chọn theme \"" + theme.name + "\" · "
+                + result.classes + "/12 nhóm quân · " + result.samples + "/24 mẫu.");
+        closeTraining(true);
+        toast("Đã train và chọn theme " + theme.name);
+    }
+
+    private void closeTraining(boolean restoreFab) {
+        if (trainingView != null) {
+            try {
+                wm.removeView(trainingView);
+            } catch (Throwable ignored) {
+            }
+            trainingView = null;
+        }
+        trainingShowing = false;
+        trainingBusy = false;
+        trainingThemeName = null;
+        trainingMasks = null;
+        trainingContrasts = null;
+        if (restoreFab && prepared) {
+            showFab();
         }
     }
 
@@ -483,9 +737,8 @@ public class BotService extends Service {
         if (cal != null) {
             moveFabOutsideBoard(cal[0], cal[1], cal[2], cal[3]);
         }
-        OnnxChessRecognizer recognizer = getChessVisionRecognizer();
         final long gen = ++generation;
-        final GameController c = new GameController(this, capture, recognizer, screenW, screenH,
+        final GameController c = new GameController(this, capture, screenW, screenH,
                 new GameController.Listener() {
                     @Override
                     public void onStatus(String text) {
@@ -499,7 +752,6 @@ public class BotService extends Service {
                                 return;
                             }
                             controller = null;
-                            releaseChessVisionRecognizer();
                             if (fab != null) {
                                 fab.setRunning(false);
                             }
@@ -520,33 +772,12 @@ public class BotService extends Service {
         c.start();
     }
 
-    private OnnxChessRecognizer getChessVisionRecognizer() {
-        if (chessVisionRecognizer != null) {
-            return chessVisionRecognizer;
-        }
-        try {
-            chessVisionRecognizer = new OnnxChessRecognizer(this);
-        } catch (RuntimeException e) {
-            EventLog.add("Không khởi tạo được bộ nhận diện ONNX: " + e);
-        }
-        return chessVisionRecognizer;
-    }
-
-    private void releaseChessVisionRecognizer() {
-        OnnxChessRecognizer recognizer = chessVisionRecognizer;
-        chessVisionRecognizer = null;
-        if (recognizer != null) {
-            recognizer.close();
-        }
-    }
-
     private void stopBot(boolean announce) {
         GameController c = controller;
         controller = null;
         if (c != null) {
             c.stop();
         }
-        releaseChessVisionRecognizer();
         if (fab != null) {
             fab.setRunning(false);
         }

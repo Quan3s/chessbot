@@ -8,7 +8,7 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.20.apk`.
+APK sau khi build: `build/ChessBot-Assist-v1.5.21.apk`.
 
 **Bản 1.5.7:** quay về ngưỡng nhận diện gốc của v1.5.2 làm lựa chọn đầu tiên, đồng thời thử thêm các ngưỡng tương phản rộng hơn khi cần. Nhật ký nay ghi rõ số ô trống bị nhận nhầm, số quân bị bỏ sót và thông báo lỗi cũng nêu đúng hai loại sai lệch này.
 
@@ -36,18 +36,20 @@ APK sau khi build: `build/ChessBot-Assist-v1.5.20.apk`.
 
 **Bản 1.5.19:** thay model nhận diện bằng LiveChess2FEN MobileNetV2 chính thức. Ảnh chụp được cắt đúng vùng bàn cờ đã hiệu chỉnh, chia 64 ô, resize và chuẩn hoá RGB theo MobileNetV2 rồi chạy ONNX Runtime trực tiếp trên thiết bị; không gửi ảnh toàn màn hình cho model và không dùng OpenCV.
 
-**Bản 1.5.20:** khi model nhận đúng phần lớn ô có quân nhưng phân loại sai loại quân, bot vẫn kiểm tra nước đi bằng xác suất occupancy và danh sách nước hợp lệ thay vì rơi hẳn về BoardReader. Khai cuộc chỉ được khôi phục nếu ít nhất 54/64 ô occupancy khớp và confidence đủ cao; thêm khoảng nghỉ sau mỗi lần quét ONNX để tránh quét lặp liên tục trên thiết bị chậm.
+**Bản 1.5.20:** cải thiện khởi chạy khi LiveChess2FEN nhận occupancy gần đúng nhưng phân loại sai loại quân.
+
+**Bản 1.5.21:** bỏ nhận diện ONNX. Giữ nút nổi để mở menu căn chỉnh hoặc train theme; train 12 nhóm quân ở cả ô tối/sáng (24 mẫu), đặt tên và lưu nhiều theme trên thiết bị. Bộ đọc so khớp hình quân đã train với ô bàn cờ; chọn theme trong Cài đặt.
 
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.20.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.21.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
 
-APK là **universal**: một file chứa cả hai bộ máy cùng ONNX Runtime cho arm64-v8a và armeabi-v7a; Android tự chọn đúng ABI.
+APK là **universal**: một file chứa cả hai bộ máy cho arm64-v8a và armeabi-v7a; Android tự chọn đúng ABI.
 
 > **Cài từ bản ChessBot ký bằng khóa khác:** Android không thể cập nhật đè. Gỡ bản cũ trước khi cài APK này; việc gỡ ứng dụng sẽ xóa cài đặt và vùng bàn cờ đã lưu.
 
@@ -69,7 +71,7 @@ Sau đó bấm **BẬT NÚT NỔI** → hộp thoại quay màn hình của Andr
 
 1. Mở app cờ vua bạn muốn dùng (Chess.com, Lichess, Cờ Vua Online, app nội bộ…).
 2. Tạo **ván mới từ thế cờ ban đầu**. App chỉ bám được ván bắt đầu từ thế cờ chuẩn; ván đang chơi dở hoặc thế cờ tùy chỉnh sẽ bị từ chối.
-3. Trong ChessBot, chọn **Hướng bàn cờ**: Tự động hoặc góc của ô a1. Khi bàn cờ bị xoay, chọn đúng cạnh có quân Trắng.
+3. Trong ChessBot, chọn **Hướng bàn cờ**: Tự động hoặc góc của ô a1. Chọn **Bộ quân / theme** đã train để bot nhận đúng bộ quân.
 4. Đặt nút nổi ở chỗ không che bàn cờ. Sau khi hiệu chỉnh, app tự dời nút ra ngoài vùng bàn cờ nếu thấy chồng lên.
 
 Bạn **không cần chọn màu ở đây**: màu quân được hỏi ngay sau khi hiệu chỉnh, và hỏi lại mỗi lần bấm ▶. Mục **Màu quân của bạn (mặc định)** chỉ là gợi ý cho hai chỗ đó.
@@ -78,7 +80,7 @@ Bạn **không cần chọn màu ở đây**: màu quân được hỏi ngay sau
 
 Có hai cách mở khung hiệu chỉnh:
 
-- **Giữ nút nổi khoảng 0,5 giây** khi đang ở app cờ vua (cách nhanh nhất), hoặc
+- **Giữ nút nổi khoảng 0,5 giây** để mở menu căn chỉnh / train, hoặc
 - bấm **Hiệu chỉnh bàn cờ** trong ChessBot; app sẽ thu nhỏ ChessBot xuống và mở khung sau 3 giây để bạn kịp chuyển sang app cờ vua.
 
 Trong khung hiệu chỉnh:
@@ -123,7 +125,8 @@ Khi ván kết thúc (hết nước, chiếu bí, hoà), bot tự dừng và nú
 | Mục | Ý nghĩa |
 |---|---|
 | **Màu quân của bạn (mặc định)** | Trắng / Đen. Đây là lựa chọn gợi ý; sau khi hiệu chỉnh và mỗi lần bấm ▶ app vẫn hỏi lại cho chắc. |
-| **Hướng bàn cờ** | Tự động nhận diện hướng từ model, hoặc chọn cạnh/góc ô a1 thủ công (hỗ trợ cả xoay 90° và 180°). |
+| **Hướng bàn cờ** | Tự động nhận diện hướng hoặc chọn cạnh/góc ô a1 thủ công (hỗ trợ xoay 90° và 180°). |
+| **Bộ quân / theme** | Chọn theme đã train trên thiết bị; giữ nút nổi và chọn **Train bộ quân / theme** để thêm theme. |
 | **Cách đi quân** | **Chạm 2 lần** (chạm ô nguồn, rồi ô đích) hoặc **Kéo** (kéo quân từ nguồn đến đích). Nếu app cờ vua không nhận một kiểu, đổi kiểu còn lại. |
 | **Stockfish** | Stockfish 16 có sẵn; dùng **Tải Stockfish tùy chỉnh** để lấy danh sách bản Android chính thức, tải thêm phiên bản rồi chọn bản đã tải. Cần mạng khi lấy danh sách/tải; chơi vẫn offline. |
 | **Độ mạnh** | Skill Level của Stockfish, 0–20. **20 = tắt giới hạn, chạy hết sức.** Nút **MAX** đặt luôn Skill 20 + 10000 ms. |
@@ -135,21 +138,21 @@ Gợi ý: **Skill 20 / 5000 ms** là cấu hình mạnh, cân bằng. Muốn nha
 ## 7. Cách hoạt động (tóm tắt kỹ thuật)
 
 ```
-MediaProjection (0.5×) ──> cắt vùng đã hiệu chỉnh ──> chia 64 ô ──> LiveChess2FEN ONNX
-              └──────────> BoardReader dự phòng ───────────────────┘
-                                  │
-                  so khớp với nước đi hợp lệ của chesslib
-                                  │
-                            cập nhật bàn cờ
-                                  │
-                 Stockfish (CPU/RAM tự động hoặc tùy chỉnh)
-                                  │
-                  AccessibilityService.dispatchGesture
+MediaProjection (0.5×) ──> vùng bàn đã hiệu chỉnh ──> tách hình quân theo ô
+                                      │
+                          so khớp theme quân đã train
+                                      │
+                    xác nhận bằng nước hợp lệ của chesslib
+                                      │
+                              cập nhật bàn cờ
+                                      │
+                    Stockfish ──> AccessibilityService
 ```
 
 - **Học bộ quân ở thế cờ chuẩn.** App dùng vị trí đầu đã biết để gán nhãn ảnh các quân trên từng ô, học đủ 12 loại quân (6 trắng, 6 đen) của đúng bộ quân/theme đang dùng. Trên các khung hình sau, app so silhouette từng quân với mẫu đã học và lấy màu từ đặc trưng ảnh; nhận dạng chỉ được bật nếu học đủ mẫu và tự kiểm tra thành công.
 - **Xác nhận bằng luật cờ.** Với mỗi ảnh bàn cờ đổi, app thử nước hợp lệ và chỉ dùng kết quả nhận diện quân khi toàn bộ bàn cờ khớp chính xác một nước đi. Nếu có ô nào không chắc, app quay về so lưới ô có quân/trống như trước; nếu cách đó cũng không xác định duy nhất nước đi, app chờ/báo lỗi chứ không đoán.
-- **Model LiveChess2FEN offline.** MobileNetV2 ONNX phân loại từng ô từ ảnh bàn cờ đã cắt thủ công; input dùng 224×224 RGB và preprocessing MobileNetV2 chính thức. Không có bước dò bàn cờ tự động hoặc dùng ảnh toàn màn hình. Khi nhận diện nước đi, xác suất từng ô được đối chiếu với thế cờ trước và các nước hợp lệ để sửa các ô model phân loại chưa chính xác.
+- **Theme quân tùy chỉnh.** Giữ nút nổi, chọn **Train bộ quân / theme**, đặt tên theme rồi làm theo 24 bước: mỗi nhóm Trắng/Đen × Tốt/Mã/Tượng/Xe/Hậu/Vua được chụp trên một ô tối và một ô sáng. Mẫu được lưu cục bộ; có thể lưu nhiều theme và chọn theme trong Cài đặt. Nên dùng bàn phân tích/chỉnh thế cờ để đặt quân vào d4/e4.
+- **Xác nhận bằng luật cờ.** Nhận diện quân và occupancy chỉ được dùng khi bàn cờ khớp một nước hợp lệ; nếu không rõ, bot chờ thay vì đoán.
 - **Phân biệt nước ăn quân** bằng độ sáng / độ đặc của quân tại ô nguồn (trước) và ô đích (sau), vì nhiều nước ăn quân khác nhau có thể cho cùng một lưới ô trống / có quân.
 - **Nút nổi** là `TYPE_APPLICATION_OVERLAY`, kéo được, lưu vị trí; giữ 0,5 giây để mở hiệu chỉnh.
 - **Stockfish** mặc định là binary tĩnh đóng gói trong `jniLibs`; bản tùy chọn được tải vào vùng riêng của app và kiểm tra UCI trước khi chọn. Engine chạy qua UCI (`uci`, `setoption`, `position fen`, `go movetime`), không cần root. Skill 20 tắt `UCI_LimitStrength`; mặc định dùng tối đa 16 luồng và hash tự chọn theo RAM thực (128–1024 MB), có thể chỉnh trong mục Nâng cao.
@@ -189,7 +192,7 @@ MediaProjection (0.5×) ──> cắt vùng đã hiệu chỉnh ──> chia 64 
 Yêu cầu:
 
 - JDK 21 (`javac`, `keytool`)
-- `curl`, `unzip`, `sha256sum` (tải và xác minh ONNX Runtime Android, checksum được ghim trong `build.sh`)
+- `curl`, `unzip`, `sha256sum`
 - Android SDK platform 35 + build-tools 35.0.0 (mặc định `/opt/android-sdk`, hoặc đặt `ANDROID_SDK_ROOT`)
 - `libs/chesslib-1.3.3.jar`
 - `app/src/main/jniLibs/arm64-v8a/libstockfish.so` và `.../armeabi-v7a/libstockfish.so` (Stockfish 16 mặc định, binary tĩnh)
@@ -199,10 +202,10 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.20.apk
+# -> build/ChessBot-Assist-v1.5.21.apk
 ```
 
-Script chạy tuần tự: tải/xác minh ONNX Runtime Android → `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + model → `zipalign` → `apksigner`. ONNX Runtime và model chạy offline trên CPU; không dùng OpenCV hoặc WebView cho nhận diện.
+Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + assets → `zipalign` → `apksigner`. Nhận diện theme chạy trực tiếp trên thiết bị; không cần ONNX Runtime hoặc OpenCV.
 
 APK cần ký bằng keystore riêng. Trong bản build phát hành này, `keystore.jks` và mật khẩu nằm cục bộ trong `.release-signing.env` (được `.gitignore` loại khỏi Git); hãy sao lưu **cả hai** ở nơi an toàn. Mất keystore sẽ khiến các bản cập nhật sau không thể cài đè APK này. Có thể đặt `CHESSBOT_KEYSTORE`, `CHESSBOT_KEY_ALIAS`, `CHESSBOT_STORE_PASS` và `CHESSBOT_KEY_PASS` để dùng keystore khác.
 
@@ -214,12 +217,12 @@ chessbot/
 ├── libs/chesslib-1.3.3.jar      # luật cờ vua
 └── app/src/main/
     ├── AndroidManifest.xml
-    ├── assets/onnx/              # LiveChess2FEN model + giấy phép
+    ├── assets/                   # Tài nguyên ứng dụng
     ├── java/com/chessbot/assist/
     │   ├── MainActivity.java            # UI, quyền, cài đặt, nhật ký
     │   ├── BotService.java              # foreground service, nút nổi, hiệu chỉnh
     │   ├── GameController.java          # vòng lặp bot, so khớp nước đi
-    │   ├── OnnxChessRecognizer.java     # crop 64 ô, preprocessing và ONNX Runtime
+    │   ├── PieceRecognizer.java         # mẫu theme và so khớp quân cờ
     │   ├── BoardReader.java             # đọc lưới ô có quân / trống
     │   ├── ScreenCapture.java           # MediaProjection 0.5×
     │   ├── StockfishEngine.java         # UCI wrapper
@@ -236,9 +239,7 @@ chessbot/
 
 ## 11. Ghi công & miễn trừ
 
-- **LiveChess2FEN MobileNetV2** — Copyright (c) 2020 David Mallasén Quintana, AGPL-3.0. Model chính thức `v0.1.0`; xem `app/src/main/assets/onnx/licenses/` để biết giấy phép và ghi công.
-- **Mã nguồn và ứng dụng kết hợp** được phân phối theo GNU AGPL-3.0 do tích hợp model LiveChess2FEN; xem `LICENSE`.
-- **ONNX Runtime** — MIT License; giấy phép được đóng gói cùng APK.
+- **Mã nguồn** được phân phối theo GNU AGPL-3.0; xem `LICENSE`.
 - **Stockfish** — GPLv3, https://stockfishchess.org. APK kèm binary Stockfish 16 chính thức cho Android; các bản tùy chọn được tải trực tiếp từ GitHub `official-stockfish/Stockfish`.
 - **chesslib** của bhlangonijr — Apache License 2.0.
 - Biểu tượng và giao diện: tự vẽ, không dùng tài nguyên bên thứ ba.

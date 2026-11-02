@@ -41,17 +41,9 @@ public final class GameController {
     private static final String START_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
-    private static final float START_MIN_MODEL_CONFIDENCE = 0.25f;
-    private static final float START_MEAN_MODEL_CONFIDENCE = 0.90f;
-    private static final int MIN_RECOVERED_START_OCCUPANCY_MATCHES = 54;
-    private static final float MIN_RECOVERED_START_MEAN_CONFIDENCE = 0.85f;
-    private static final float MIN_VISION_MOVE_SCORE_GAIN = 2.5f;
-    private static final float MIN_VISION_MOVE_SCORE_GAP = 2.0f;
-    private static final long RECOGNITION_INTERVAL_MS = 2500;
 
     private final Context ctx;
     private final ScreenCapture capture;
-    private final OnnxChessRecognizer chessVision;
     private final Listener listener;
     private final Board board = new Board();
     private final StockfishEngine engine;
@@ -70,17 +62,11 @@ public final class GameController {
     private int tapMode;
     /** True only when the shape templates were learned and self-checked. */
     private boolean typedReady;
-    private boolean visionFallbackLogged;
-    private long lastVisionScanAt;
-    private long lastReliableVisionAt;
-    private OnnxChessRecognizer.Result lastReliableVision;
 
-    public GameController(Context ctx, ScreenCapture capture, OnnxChessRecognizer chessVision,
-                          int screenW, int screenH,
+    public GameController(Context ctx, ScreenCapture capture, int screenW, int screenH,
                           Listener listener) {
         this.ctx = ctx;
         this.capture = capture;
-        this.chessVision = chessVision;
         this.screenW = screenW;
         this.screenH = screenH;
         this.listener = listener;
@@ -90,6 +76,16 @@ public final class GameController {
         this.skill = Prefs.getSkill(ctx);
         this.tapMode = Prefs.getTapMode(ctx);
         this.engine = new StockfishEngine(StockfishCatalog.resolveEnginePath(ctx));
+        byte[] selectedTemplates = PieceThemeStore.getTemplates(
+                ctx, Prefs.getPieceThemeId(ctx));
+        if (selectedTemplates != null) {
+            typedReady = recognizer.loadTemplates(selectedTemplates);
+            if (!typedReady) {
+                EventLog.add("Theme quân đã chọn bị lỗi dữ liệu; cần train lại.");
+            } else {
+                EventLog.add("Đã nạp theme quân \"" + selectedThemeName(ctx) + "\".");
+            }
+        }
     }
 
     public void start() {
@@ -161,35 +157,11 @@ public final class GameController {
                         rect[0], rect[1], rect[2], rect[3],
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
                 int[] readerGrid = res.boardOccupancy(a1Position);
-                long now = SystemClock.elapsedRealtime();
-                OnnxChessRecognizer.Result pieceRead = null;
-                if (now - lastVisionScanAt >= RECOGNITION_INTERVAL_MS) {
-                    pieceRead = recognizeWithChessVision(frame);
-                } else if (lastReliableVision != null
-                        && now - lastReliableVisionAt <= RECOGNITION_INTERVAL_MS + 350) {
-                    pieceRead = lastReliableVision;
-                }
-                boolean usedChessVision = pieceRead != null && pieceRead.reliable;
-                Move visionMoveCandidate = null;
-                boolean visionLikelihoodMove = false;
-                if (usedChessVision) {
-                    if (pieceRead.plausible) {
-                        visionMoveCandidate = findMoveByPlacement(
-                                pieceRead.placementFor(a1Position));
-                    }
-                    if (visionMoveCandidate == null) {
-                        visionMoveCandidate = findMoveByVisionLikelihood(
-                                pieceRead, a1Position, pieceRead.plausible);
-                        visionLikelihoodMove = visionMoveCandidate != null;
-                    }
-                    if (tapPending && pending != null
-                            && !pending.equals(visionMoveCandidate)) {
-                        visionMoveCandidate = null;
-                        visionLikelihoodMove = false;
-                    }
-                }
-                int[] grid = usedChessVision && visionMoveCandidate != null
-                        ? boardOccupancyAfterMove(visionMoveCandidate) : readerGrid;
+                PieceRecognizer.Recognized typedRead = typedReady
+                        ? recognizer.classifyBoard(frame.pixels, frame.width, frame.height,
+                                res, a1Position)
+                        : null;
+                int[] grid = typedRead == null ? readerGrid : occupancyFrom(typedRead);
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
                     stable++;
                 } else {
@@ -220,21 +192,11 @@ public final class GameController {
                     // ambiguous case of two identical-looking captures
                     // (e.g. a knight can take either of two identical pawns).
                     Move move = null;
-                    boolean moveResolvedByVisionLikelihood = false;
                     if (tapPending && pending != null && matchesMove(grid, pending)) {
                         move = pending;
                     } else {
-                        Move occupancyMove = null;
-                        boolean exactPieceMove = false;
-                        if (usedChessVision) {
-                            occupancyMove = visionMoveCandidate;
-                            exactPieceMove = occupancyMove != null;
-                            moveResolvedByVisionLikelihood = visionLikelihoodMove;
-                        }
-                        if (occupancyMove == null) {
-                            occupancyMove = findMoveWithThresholdFallback(
-                                    frame, grid, res, baseline);
-                        }
+                        Move occupancyMove = findMoveWithThresholdFallback(
+                                frame, grid, res, baseline);
                         if (occupancyMove != null) {
                             if (occupancyMove.equals(previousObservedMove)) {
                                 observedMoveRepeats++;
@@ -274,25 +236,19 @@ public final class GameController {
                             sleep(230);
                             continue;
                         }
-                        if (typedReady && !exactPieceMove) {
+                        if (typedReady && typedRead != null) {
                             // Piece types are extra evidence, never a
                             // replacement for the occupancy match. They are
                             // accepted only when unique and clearly better.
-                            PieceRecognizer.Recognized rec = recognizer.classifyBoard(
-                                    frame.pixels, frame.width, frame.height, res, a1Position);
-                            Move typedMove = chooseTypedMove(grid, rec);
+                            Move typedMove = chooseTypedMove(grid, typedRead);
                             if (typedMove != null && !typedMove.equals(move)) {
                                 EventLog.add("Nhận diện quân xác nhận: " + uci(typedMove)
                                         + " · tin cậy "
-                                        + Math.round(PieceRecognizer.averageConfidence(rec) * 100)
+                                        + Math.round(PieceRecognizer.averageConfidence(typedRead) * 100)
                                         + "%");
                                 move = typedMove;
                             }
                         }
-                    }
-                    if (moveResolvedByVisionLikelihood) {
-                        EventLog.add("LiveChess2FEN + vị trí trước xác nhận nước "
-                                + uci(move));
                     }
                     Side mover = board.getSideToMove();
                     board.doMove(move);
@@ -423,81 +379,92 @@ public final class GameController {
 
         board.clear();
         board.loadFromFen(START_FEN);
-        OnnxChessRecognizer.Result pieceRead = recognizeWithChessVision(frame);
-        if (pieceRead != null) {
-            EventLog.add("ONNX lưới dự đoán (theo ảnh chụp, dấu chấm là ô trống):\n"
-                    + pieceRead.screenRows);
-            EventLog.add("LiveChess2FEN: a1 ở góc " + BoardOrientation.label(
-                    pieceRead.a1Position));
-        }
         int orient = Prefs.getOrientation(ctx);
         int selectedOrientation = BoardOrientation.fromPreference(orient);
-        int recognizedOrientation = orient == Prefs.ORIENT_AUTO && pieceRead != null
-                ? pieceRead.a1Position : selectedOrientation;
-        boolean exactModelStart = pieceRead != null && pieceRead.reliable
-                && pieceRead.plausible
-                && START_PLACEMENT.equals(pieceRead.placementFor(recognizedOrientation));
-        int modelOccupancyMatches = pieceRead == null ? 0
-                : startingOccupancyMatches(pieceRead.boardOccupancy(recognizedOrientation));
-        boolean confidentModelStart = pieceRead != null
-                && pieceRead.minConfidence >= START_MIN_MODEL_CONFIDENCE
-                && pieceRead.meanConfidence >= START_MEAN_MODEL_CONFIDENCE
-                && modelOccupancyMatches == 64;
-        boolean recoveredModelStart = pieceRead != null && pieceRead.reliable
-                && pieceRead.meanConfidence >= MIN_RECOVERED_START_MEAN_CONFIDENCE
-                && modelOccupancyMatches >= MIN_RECOVERED_START_OCCUPANCY_MATCHES;
-        if (exactModelStart || confidentModelStart || recoveredModelStart) {
-            a1Position = recognizedOrientation;
-            botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
-            if (startRead.isValid()) {
-                Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
+        if (typedReady) {
+            int bestOrientation = selectedOrientation;
+            int bestPieceMatches = -1;
+            PieceRecognizer.Recognized bestRead = null;
+            int firstOrientation = orient == Prefs.ORIENT_AUTO
+                    ? BoardOrientation.A1_BOTTOM_LEFT : selectedOrientation;
+            int lastOrientation = orient == Prefs.ORIENT_AUTO
+                    ? BoardOrientation.A1_TOP_RIGHT : selectedOrientation;
+            for (int candidate = firstOrientation; candidate <= lastOrientation; candidate++) {
+                PieceRecognizer.Recognized typed =
+                        recognizer.classifyBoard(frame.pixels, frame.width, frame.height,
+                                res, candidate);
+                int matches = startingPieceMatches(typed);
+                if (matches > bestPieceMatches) {
+                    bestPieceMatches = matches;
+                    bestOrientation = candidate;
+                    bestRead = typed;
+                }
             }
-            EventLog.add((exactModelStart
-                    ? "ONNX xác nhận chính xác vị trí đầu"
-                    : recoveredModelStart && !confidentModelStart
-                            ? "ONNX xác nhận gần đúng occupancy khai cuộc "
-                                    + modelOccupancyMatches + "/64 ô"
-                                    + (pieceRead.plausible ? "" : "; sẽ đối chiếu nước đi theo occupancy")
-                            : "ONNX xác nhận occupancy 32 quân ở đúng hàng khai cuộc"
-                                    + (pieceRead.plausible ? "" : " dù phân loại loại quân chưa hợp lý"))
-                    + ", độ tin cậy tối thiểu "
-                    + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
-                    + Math.round(pieceRead.meanConfidence * 100) + "%");
-            return null;
+            int occupancyMatches = bestRead == null ? 0
+                    : startingOccupancyMatches(occupancyFrom(bestRead));
+            if (bestRead != null && occupancyMatches >= 60 && bestPieceMatches >= 24) {
+                a1Position = bestOrientation;
+                botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
+                if (startRead.isValid()) {
+                    Prefs.setBoardThresholds(ctx, startRead.devThreshold,
+                            startRead.fillThreshold);
+                }
+                EventLog.add("Theme nhận diện khai cuộc: occupancy " + occupancyMatches
+                        + "/64 · loại/màu " + bestPieceMatches + "/32 · "
+                        + BoardOrientation.label(a1Position));
+                EventLog.add("Bàn cờ theo theme:\n" + recognizer.describe(bestRead));
+                return null;
+            }
+            return "Theme \"" + selectedThemeName(ctx) + "\" chưa khớp bàn khai cuộc "
+                    + "(occupancy " + occupancyMatches + "/64, loại/màu "
+                    + bestPieceMatches + "/32). Train lại theme hoặc chọn đúng theme.";
         }
 
         int mismatch = startRead.mismatch;
         int occ = startRead.occupied;
-        if (pieceRead != null) {
-            EventLog.add("ONNX không xác nhận khai cuộc: độ tin cậy tối thiểu "
-                    + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
-                    + Math.round(pieceRead.meanConfidence * 100) + "%, thế cờ hợp lý "
-                    + (pieceRead.plausible ? "có" : "không")
-                    + ", occupancy khai cuộc khớp " + modelOccupancyMatches + "/64 ô");
-        } else {
-            EventLog.add("ONNX không trả kết quả; kiểm tra lỗi ONNX Runtime phía trên.");
-        }
         EventLog.add("Kiểm tra vị trí đầu: " + startRead.falsePositives
-                + " ô trống nhận nhầm là có quân, " + startRead.missedPieces
+                + " ô trống nhận nhầm thành có quân, " + startRead.missedPieces
                 + " quân bị bỏ sót; đúng " + (64 - mismatch) + "/64 ô");
         if (!startRead.isValid()) {
-            return "Không nhận diện rõ bàn cờ: nhầm " + startRead.falsePositives
-                    + " ô trống thành có quân, bỏ sót " + startRead.missedPieces
-                    + " quân; đúng " + (64 - mismatch) + "/64 ô. Hãy căn khung sát mép "
-                    + "bàn cờ và bảo đảm nút nổi không che quân.";
+            return "Không nhận diện rõ bàn cờ. Hãy train và chọn bộ quân phù hợp "
+                    + "hoặc căn khung sát mép bàn cờ.";
         }
 
         a1Position = orient == Prefs.ORIENT_AUTO
-                ? (pieceRead != null && pieceRead.plausible ? pieceRead.a1Position
-                        : BoardOrientation.inferFromScreenColors(res.screenColors()))
+                ? BoardOrientation.inferFromScreenColors(res.screenColors())
                 : selectedOrientation;
         EventLog.add("Hướng bàn cờ: a1 ở góc " + BoardOrientation.label(a1Position)
-                + (pieceRead == null ? " (BoardReader)" : " (LiveChess2FEN)"));
+                + " (BoardReader)");
 
         Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
         learnPieces(frame, res, occ == 32 && mismatch == 0);
         return null;
+    }
+
+    private int startingPieceMatches(PieceRecognizer.Recognized recognized) {
+        if (recognized == null) {
+            return 0;
+        }
+        int matches = 0;
+        for (Square square : Square.values()) {
+            if (square == Square.NONE) {
+                continue;
+            }
+            Piece expected = board.getPiece(square);
+            if (expected == null || expected == Piece.NONE) {
+                continue;
+            }
+            int index = square.ordinal();
+            int expectedType = expected.ordinal() % 6;
+            int expectedColor = expected.ordinal() < 6
+                    ? BoardReader.WHITE : BoardReader.BLACK;
+            if (recognized.type[index] == expectedType
+                    && recognized.color[index] == expectedColor) {
+                matches++;
+            }
+        }
+        return matches;
     }
 
     private int startingOccupancyMatches(int[] occupancy) {
@@ -506,158 +473,30 @@ public final class GameController {
         }
         int matches = 0;
         for (int square = 0; square < 64; square++) {
-            int rank = square / 8;
-            boolean expectedOccupied = rank < 2 || rank >= 6;
-            if ((occupancy[square] != 0) == expectedOccupied) {
+            boolean expected = square / 8 < 2 || square / 8 >= 6;
+            if ((occupancy[square] != 0) == expected) {
                 matches++;
             }
         }
         return matches;
     }
 
-    private OnnxChessRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
-        if (chessVision == null) {
-            return null;
+    private int[] occupancyFrom(PieceRecognizer.Recognized recognized) {
+        int[] occupancy = new int[64];
+        for (int square = 0; square < occupancy.length; square++) {
+            occupancy[square] = recognized.type[square] == PieceRecognizer.TYPE_EMPTY ? 0 : 1;
         }
-        lastVisionScanAt = SystemClock.elapsedRealtime();
-        try {
-            OnnxChessRecognizer.Result result = chessVision.recognize(frame, rect);
-            lastVisionScanAt = SystemClock.elapsedRealtime();
-            if (result != null && result.reliable) {
-                lastReliableVision = result;
-                lastReliableVisionAt = lastVisionScanAt;
-                if (result.plausible && visionFallbackLogged) {
-                    EventLog.add("ONNX nhận diện ổn định trở lại");
-                    visionFallbackLogged = false;
-                }
-                if (!result.plausible && !visionFallbackLogged) {
-                    EventLog.add("ONNX đọc được occupancy nhưng loại quân chưa hợp lý; "
-                            + "chỉ dùng khi khớp nước hợp lệ theo xác suất");
-                    visionFallbackLogged = true;
-                }
-                return result;
-            }
-            lastReliableVision = null;
-            if (!visionFallbackLogged) {
-                EventLog.add(result == null
-                        ? "ONNX chưa đọc được bàn cờ; dùng nhận diện dự phòng."
-                        : "ONNX chưa đủ tin cậy (tối thiểu "
-                                + Math.round(result.minConfidence * 100)
-                                + "%); dùng nhận diện dự phòng.");
-                visionFallbackLogged = true;
-            }
-            return result;
-        } catch (Exception e) {
-            lastVisionScanAt = SystemClock.elapsedRealtime();
-            lastReliableVision = null;
-            if (!visionFallbackLogged) {
-                EventLog.add("ONNX Runtime lỗi, dùng nhận diện dự phòng: " + e);
-                visionFallbackLogged = true;
-            }
-            return null;
-        }
+        return occupancy;
     }
 
-    private Move findMoveByPlacement(String placement) {
-        Move matched = null;
-        for (Move move : board.legalMoves()) {
-            Board after = board.clone();
-            after.doMove(move);
-            if (matchesPlacement(after, placement)) {
-                if (matched != null) {
-                    return null;
-                }
-                matched = move;
+    private String selectedThemeName(Context context) {
+        String id = Prefs.getPieceThemeId(context);
+        for (PieceThemeStore.Theme theme : PieceThemeStore.getThemes(context)) {
+            if (theme.id.equals(id)) {
+                return theme.name;
             }
         }
-        return matched;
-    }
-
-    private Move findMoveByVisionLikelihood(OnnxChessRecognizer.Result vision,
-                                            int orientation, boolean includePieceType) {
-        String currentFen = board.getFen();
-        String currentPlacement = currentFen.substring(0, currentFen.indexOf(' '));
-        float currentScore;
-        try {
-            currentScore = includePieceType
-                    ? vision.logLikelihoodForPlacement(currentPlacement, orientation)
-                    : vision.logOccupancyLikelihoodForPlacement(
-                            currentPlacement, orientation);
-            float bestScore = currentScore;
-            float secondScore = Float.NEGATIVE_INFINITY;
-            Move bestMove = null;
-            for (Move candidate : board.legalMoves()) {
-                Board after = board.clone();
-                after.doMove(candidate);
-                String afterFen = after.getFen();
-                String afterPlacement = afterFen.substring(0, afterFen.indexOf(' '));
-                float score = includePieceType
-                        ? vision.logLikelihoodForPlacement(afterPlacement, orientation)
-                        : vision.logOccupancyLikelihoodForPlacement(afterPlacement, orientation);
-                if (score > bestScore) {
-                    secondScore = bestScore;
-                    bestScore = score;
-                    bestMove = candidate;
-                } else if (score > secondScore) {
-                    secondScore = score;
-                }
-            }
-
-            if (bestMove == null
-                    || bestScore - currentScore < MIN_VISION_MOVE_SCORE_GAIN
-                    || bestScore - secondScore < MIN_VISION_MOVE_SCORE_GAP) {
-                return null;
-            }
-            return bestMove;
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("Invalid LiveChess2FEN placement", e);
-        }
-    }
-
-    private int[] boardOccupancyAfterMove(Move move) {
-        Board after = board.clone();
-        after.doMove(move);
-        return boardOccupancy(after);
-    }
-
-    private boolean matchesPlacement(Board position, String placement) {
-        String[] ranks = placement.split("/");
-        if (ranks.length != 8) {
-            return false;
-        }
-        for (int row = 0; row < 8; row++) {
-            int file = 0;
-            for (int i = 0; i < ranks[row].length(); i++) {
-                char symbol = ranks[row].charAt(i);
-                if (symbol >= '1' && symbol <= '8') {
-                    int emptySquares = symbol - '0';
-                    if (file + emptySquares > 8) {
-                        return false;
-                    }
-                    for (int empty = 0; empty < emptySquares; empty++) {
-                        Square square = Square.values()[(7 - row) * 8 + file++];
-                        Piece piece = position.getPiece(square);
-                        if (piece != null && piece != Piece.NONE) {
-                            return false;
-                        }
-                    }
-                } else if ("KQRBNPkqrbnp".indexOf(symbol) >= 0 && file < 8) {
-                    Square square = Square.values()[(7 - row) * 8 + file];
-                    Piece piece = position.getPiece(square);
-                    if (piece == null || piece == Piece.NONE
-                            || !String.valueOf(symbol).equals(piece.getFenSymbol())) {
-                        return false;
-                    }
-                    file++;
-                } else {
-                    return false;
-                }
-            }
-            if (file != 8) {
-                return false;
-            }
-        }
-        return true;
+        return "không rõ";
     }
 
     private StartFrame captureStartingPosition() {
