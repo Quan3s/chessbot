@@ -391,7 +391,7 @@ public final class GameController {
         BoardReader.StartRead startRead = startFrame.read;
         BoardReader.Result res = startRead.result;
         EventLog.add("Nhận diện sơ bộ:\n" + res.debugRows());
-        EventLog.add("Ngưỡng nhận diện: chênh lệch " + startRead.devThreshold
+        EventLog.add("Ngưỡng BoardReader dự phòng: chênh lệch " + startRead.devThreshold
                 + " · diện tích " + Math.round(startRead.fillThreshold * 100) + "%");
 
         board.clear();
@@ -405,7 +405,9 @@ public final class GameController {
                 && START_PLACEMENT.equals(pieceRead.placementFor(recognizedWhiteAtBottom))) {
             whiteAtBottom = recognizedWhiteAtBottom;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
-            Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
+            if (startRead.isValid()) {
+                Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
+            }
             EventLog.add("OpenCV DNN xác nhận vị trí đầu, độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%");
             return null;

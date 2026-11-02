@@ -733,7 +733,7 @@ public class BotService extends Service {
                     msg += " — căn khung sát mép bàn cờ và mở ván mới";
                 }
                 EventLog.add("Kiểm tra hiệu chỉnh: " + msg);
-                EventLog.add("Ngưỡng nhận diện: chênh lệch " + bestRead.devThreshold
+                EventLog.add("Ngưỡng BoardReader dự phòng: chênh lệch " + bestRead.devThreshold
                         + " · diện tích " + Math.round(bestRead.fillThreshold * 100) + "%");
                 EventLog.add(res.debugRows());
                 final String m = msg;

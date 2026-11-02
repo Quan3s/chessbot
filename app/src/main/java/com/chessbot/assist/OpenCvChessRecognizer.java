@@ -108,6 +108,11 @@ public final class OpenCvChessRecognizer {
             throw new IOException("Calibrated board bounds are empty");
         }
 
+        Net net;
+        synchronized (MODEL_LOCK) {
+            net = loadNet();
+        }
+
         Bitmap bitmap = Bitmap.createBitmap(frame.pixels, frame.width, frame.height,
                 Bitmap.Config.ARGB_8888);
         Mat rgba = new Mat();
@@ -147,7 +152,6 @@ public final class OpenCvChessRecognizer {
                     false, false, CvType.CV_32F);
             float[] values;
             synchronized (MODEL_LOCK) {
-                Net net = loadNet();
                 net.setInput(blob);
                 logits = net.forward();
                 if (logits.total() * logits.channels() != 64L * CLASS_COUNT) {

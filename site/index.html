@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.11</title>
+<title>ChessBot Assist 1.5.12</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,21 +88,23 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.11</span>
+  <span class="badge">Bản 1.5.12</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.11/ChessBot-Assist-v1.5.11.apk">
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.12/ChessBot-Assist-v1.5.12.apk">
       ⬇ Tải APK (83 MB)
     </a>
     <div class="meta">
       Android 8.0 – 16 · arm64-v8a + armeabi-v7a<br>
-      SHA-256: <code>22bdcc27b694b5fded8337957db42521bd025e24d8c820d96fb3a783c4a65f76</code>
+      SHA-256: <code>4ddb07f944ab531eae1dcf113722adbcbd47cbf47c415d9ebfb7a65173158877</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.11</h2>
+    <h2>Có gì mới ở 1.5.12</h2>
     <ul>
+      <li><b>Sửa khởi tạo OpenCV:</b> nạp native runtime trước khi tạo ảnh/matrix, tránh lỗi <code>Mat.n_Mat()</code> khiến DNN không chạy.</li>
+      <li><b>Ngưỡng 26 được làm rõ:</b> đây là ngưỡng mặc định của BoardReader dự phòng, không phải ngưỡng OpenCV DNN; không lưu ngưỡng nếu bộ đọc chưa nhận diện bàn hợp lệ.</li>
       <li><b>Chuyển sang OpenCV Android DNN:</b> OpenCV xử lý ảnh và chạy CNN trên CPU ngay trong ứng dụng; bỏ ONNX Runtime Web và WebView nhận diện.</li>
       <li><b>Phân loại toàn bàn:</b> model đọc loại và màu quân trên 64 ô mỗi lần quét, không phụ thuộc việc bộ nhận diện cũ có phát hiện bàn đổi hay không.</li>
       <li><b>Chạy hoàn toàn offline:</b> ảnh không rời khỏi thiết bị; bot chỉ dùng thế cờ tin cậy và khớp luật.</li>
@@ -127,7 +129,7 @@
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.11 dùng cùng khóa ký với bản 1.5.10; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.12 dùng cùng khóa ký với bản 1.5.11; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
