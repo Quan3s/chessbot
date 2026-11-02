@@ -3,6 +3,8 @@ package com.chessbot.assist;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -46,6 +48,7 @@ public class MainActivity extends Activity {
     private Button btnOverlayPerm;
     private Button btnAccPerm;
     private Button btnNotifPerm;
+    private Button btnCopyLog;
     private Spinner spSide;
     private Spinner spOrient;
     private Spinner spTap;
@@ -78,6 +81,7 @@ public class MainActivity extends Activity {
         btnOverlayPerm = findViewById(R.id.btnOverlayPerm);
         btnAccPerm = findViewById(R.id.btnAccPerm);
         btnNotifPerm = findViewById(R.id.btnNotifPerm);
+        btnCopyLog = findViewById(R.id.btnCopyLog);
         spSide = findViewById(R.id.spSide);
         spOrient = findViewById(R.id.spOrient);
         spTap = findViewById(R.id.spTap);
@@ -442,6 +446,25 @@ public class MainActivity extends Activity {
     }
 
     private void setupButtons() {
+        btnCopyLog.setOnClickListener(v -> {
+            List<String> lines = EventLog.snapshot();
+            if (lines.isEmpty()) {
+                toast("Nhật ký đang trống");
+                return;
+            }
+            StringBuilder fullLog = new StringBuilder();
+            for (String line : lines) {
+                fullLog.append(line).append('\n');
+            }
+            ClipboardManager clipboard =
+                    (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (clipboard == null) {
+                toast("Không truy cập được clipboard");
+                return;
+            }
+            clipboard.setPrimaryClip(ClipData.newPlainText("ChessBot log", fullLog.toString()));
+            toast("Đã sao chép " + lines.size() + " dòng nhật ký");
+        });
         btnOverlayPerm.setOnClickListener(v -> openOverlaySettings());
         btnAccPerm.setOnClickListener(v -> openAccessibilitySettings());
         btnNotifPerm.setOnClickListener(v -> {

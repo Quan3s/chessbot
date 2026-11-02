@@ -410,15 +410,35 @@
         </LinearLayout>
 
         <!-- ============ LOG ============ -->
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="8dp"
-            android:text="NHẬT KÝ"
-            android:textColor="@color/text_dim"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="NHẬT KÝ"
+                android:textColor="@color/text_dim"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnCopyLog"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:backgroundTint="@color/accent_dark"
+                android:minWidth="0dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:text="Sao chép toàn bộ"
+                android:textColor="@color/text"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <ScrollView
             android:id="@+id/svLog"

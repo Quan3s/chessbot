@@ -16,7 +16,7 @@ LIB="$ROOT/libs/chesslib-1.3.3.jar"
 OPENCV_VERSION="4.10.0"
 OPENCV_AAR="$DEPS/opencv-$OPENCV_VERSION.aar"
 OPENCV_SHA256="eb2bdae229c761769d459bd42c991bdcecb4da04f7b54dcb2aa9e2cb1dc68ec0"
-NAME="ChessBot-Assist-v1.5.17"
+NAME="ChessBot-Assist-v1.5.18"
 
 mkdir -p "$OUT" "$DEPS"
 rm -rf "$WORK"
@@ -46,8 +46,8 @@ echo "[1/6] resources"
     --java "$WORK/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 23 \
-    --version-name "1.5.17" \
+    --version-code 24 \
+    --version-name "1.5.18" \
     --auto-add-overlay \
     "$WORK/res.zip"
 
