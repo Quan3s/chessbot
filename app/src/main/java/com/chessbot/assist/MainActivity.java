@@ -134,12 +134,19 @@ public class MainActivity extends Activity {
             }
         });
 
-        String[] orients = new String[]{"Tự động", "Trắng ở dưới", "Trắng ở trên"};
+        String[] orients = new String[]{
+                "Tự động",
+                "Trắng ở dưới (a1 góc dưới trái)",
+                "Trắng ở trên (a1 góc trên phải)",
+                "Trắng bên phải (a1 góc dưới phải)",
+                "Trắng bên trái (a1 góc trên trái)"
+        };
         ArrayAdapter<String> a2 = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, orients);
         a2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spOrient.setAdapter(a2);
-        spOrient.setSelection(Math.max(0, Math.min(2, Prefs.getOrientation(this))));
+        spOrient.setSelection(Math.max(0, Math.min(orients.length - 1,
+                Prefs.getOrientation(this))));
         spOrient.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {

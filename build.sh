@@ -10,31 +10,31 @@ BT="$SDK/build-tools/35.0.0"
 PLATFORM="$SDK/platforms/android-35/android.jar"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="$ROOT/build"
-WORK="$OUT/.opencv-build"
+WORK="$OUT/.onnx-build"
 DEPS="$OUT/deps"
 LIB="$ROOT/libs/chesslib-1.3.3.jar"
-OPENCV_VERSION="4.10.0"
-OPENCV_AAR="$DEPS/opencv-$OPENCV_VERSION.aar"
-OPENCV_SHA256="eb2bdae229c761769d459bd42c991bdcecb4da04f7b54dcb2aa9e2cb1dc68ec0"
-NAME="ChessBot-Assist-v1.5.18"
+ORT_VERSION="1.20.0"
+ORT_AAR="$DEPS/onnxruntime-android-$ORT_VERSION.aar"
+ORT_SHA256="07a8f71ef890afed8c6087a56220e6d558a492804276ee2dd7cb7f6262242027"
+NAME="ChessBot-Assist-v1.5.19"
 
 mkdir -p "$OUT" "$DEPS"
 rm -rf "$WORK"
 mkdir -p "$WORK/gen" "$WORK/classes" "$WORK/dex" "$WORK/lib/arm64-v8a" "$WORK/lib/armeabi-v7a"
 
-if [ ! -f "$OPENCV_AAR" ]; then
+if [ ! -f "$ORT_AAR" ]; then
     curl --fail --location --silent --show-error \
-        "https://repo.maven.apache.org/maven2/org/opencv/opencv/$OPENCV_VERSION/opencv-$OPENCV_VERSION.aar" \
-        -o "$OPENCV_AAR"
+        "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ORT_VERSION/onnxruntime-android-$ORT_VERSION.aar" \
+        -o "$ORT_AAR"
 fi
-echo "$OPENCV_SHA256  $OPENCV_AAR" | sha256sum --check --status || {
-    echo "OpenCV Android package checksum mismatch: $OPENCV_AAR" >&2
+echo "$ORT_SHA256  $ORT_AAR" | sha256sum --check --status || {
+    echo "ONNX Runtime Android package checksum mismatch: $ORT_AAR" >&2
     exit 1
 }
-unzip -p "$OPENCV_AAR" classes.jar > "$WORK/opencv.jar"
+unzip -p "$ORT_AAR" classes.jar > "$WORK/onnxruntime.jar"
 for abi in arm64-v8a armeabi-v7a; do
-    unzip -p "$OPENCV_AAR" "jni/$abi/libopencv_java4.so" > "$WORK/lib/$abi/libopencv_java4.so"
-    unzip -p "$OPENCV_AAR" "jni/$abi/libc++_shared.so" > "$WORK/lib/$abi/libc++_shared.so"
+    unzip -p "$ORT_AAR" "jni/$abi/libonnxruntime.so" > "$WORK/lib/$abi/libonnxruntime.so"
+    unzip -p "$ORT_AAR" "jni/$abi/libonnxruntime4j_jni.so" > "$WORK/lib/$abi/libonnxruntime4j_jni.so"
 done
 
 echo "[1/6] resources"
@@ -46,22 +46,22 @@ echo "[1/6] resources"
     --java "$WORK/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 24 \
-    --version-name "1.5.18" \
+    --version-code 25 \
+    --version-name "1.5.19" \
     --auto-add-overlay \
     "$WORK/res.zip"
 
 echo "[2/6] java"
 find "$ROOT/app/src/main/java" "$WORK/gen" -name '*.java' > "$WORK/sources.txt"
 javac -source 11 -target 11 -Xlint:-options -encoding UTF-8 \
-    -classpath "$PLATFORM:$LIB:$WORK/opencv.jar" \
+    -classpath "$PLATFORM:$LIB:$WORK/onnxruntime.jar" \
     -d "$WORK/classes" \
     @"$WORK/sources.txt"
 
 echo "[3/6] dex"
 jar cf "$WORK/classes.jar" -C "$WORK/classes" .
 "$BT/d8" --lib "$PLATFORM" --min-api 26 --output "$WORK/dex" \
-    "$WORK/classes.jar" "$LIB" "$WORK/opencv.jar"
+    "$WORK/classes.jar" "$LIB" "$WORK/onnxruntime.jar"
 
 echo "[4/6] package"
 cp "$WORK/base.apk" "$WORK/unaligned.apk"
@@ -77,7 +77,7 @@ apk = os.path.join(out, "unaligned.apk")
 with zipfile.ZipFile(apk, "a", zipfile.ZIP_DEFLATED) as z:
     z.write(os.path.join(out, "dex", "classes.dex"), "classes.dex")
     for abi in ("arm64-v8a", "armeabi-v7a"):
-        for name in ("libstockfish.so", "libopencv_java4.so", "libc++_shared.so"):
+        for name in ("libstockfish.so", "libonnxruntime.so", "libonnxruntime4j_jni.so"):
             path = os.path.join(out, "lib", abi, name)
             if os.path.isfile(path):
                 z.write(path, "lib/%s/%s" % (abi, name))

@@ -54,7 +54,7 @@ public class BotService extends Service {
     private MediaProjection projection;
     private ScreenCapture capture;
     private GameController controller;
-    private OpenCvChessRecognizer chessVisionRecognizer;
+    private OnnxChessRecognizer chessVisionRecognizer;
     private boolean prepared;
     private boolean calibrationShowing;
     private View calibrationView;
@@ -483,7 +483,7 @@ public class BotService extends Service {
         if (cal != null) {
             moveFabOutsideBoard(cal[0], cal[1], cal[2], cal[3]);
         }
-        OpenCvChessRecognizer recognizer = getChessVisionRecognizer();
+        OnnxChessRecognizer recognizer = getChessVisionRecognizer();
         final long gen = ++generation;
         final GameController c = new GameController(this, capture, recognizer, screenW, screenH,
                 new GameController.Listener() {
@@ -520,20 +520,20 @@ public class BotService extends Service {
         c.start();
     }
 
-    private OpenCvChessRecognizer getChessVisionRecognizer() {
+    private OnnxChessRecognizer getChessVisionRecognizer() {
         if (chessVisionRecognizer != null) {
             return chessVisionRecognizer;
         }
         try {
-            chessVisionRecognizer = new OpenCvChessRecognizer(this);
+            chessVisionRecognizer = new OnnxChessRecognizer(this);
         } catch (RuntimeException e) {
-            EventLog.add("Không khởi tạo được bộ nhận diện OpenCV: " + e);
+            EventLog.add("Không khởi tạo được bộ nhận diện ONNX: " + e);
         }
         return chessVisionRecognizer;
     }
 
     private void releaseChessVisionRecognizer() {
-        OpenCvChessRecognizer recognizer = chessVisionRecognizer;
+        OnnxChessRecognizer recognizer = chessVisionRecognizer;
         chessVisionRecognizer = null;
         if (recognizer != null) {
             recognizer.close();

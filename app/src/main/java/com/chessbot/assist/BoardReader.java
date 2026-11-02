@@ -73,13 +73,29 @@ public final class BoardReader {
             return g;
         }
 
+        /** EMPTY / WHITE / BLACK in screen order. */
+        public int[] screenColors() {
+            int[] g = new int[64];
+            for (int i = 0; i < 64; i++) {
+                Cell cell = cells[i];
+                g[i] = cell.occupied ? (cell.color == BLACK ? BLACK : WHITE) : EMPTY;
+            }
+            return g;
+        }
+
         /** 1 = occupied, 0 = empty, board order (index 0 = a1, 63 = h8). */
         public int[] boardOccupancy(boolean whiteAtBottom) {
+            return boardOccupancy(whiteAtBottom
+                    ? BoardOrientation.A1_BOTTOM_LEFT : BoardOrientation.A1_TOP_RIGHT);
+        }
+
+        /** 1 = occupied, 0 = empty, board order (index 0 = a1, 63 = h8). */
+        public int[] boardOccupancy(int orientation) {
             int[] g = new int[64];
             for (int rank = 0; rank < 8; rank++) {
                 for (int file = 0; file < 8; file++) {
-                    int sr = whiteAtBottom ? 7 - rank : rank;
-                    int sc = whiteAtBottom ? file : 7 - file;
+                    int sr = BoardOrientation.screenRowForSquare(rank, file, orientation);
+                    int sc = BoardOrientation.screenColumnForSquare(rank, file, orientation);
                     g[rank * 8 + file] = cells[sr * 8 + sc].occupied ? 1 : 0;
                 }
             }
@@ -88,11 +104,17 @@ public final class BoardReader {
 
         /** EMPTY / WHITE / BLACK (UNKNOWN is reported as WHITE) in board order. */
         public int[] boardColors(boolean whiteAtBottom) {
+            return boardColors(whiteAtBottom
+                    ? BoardOrientation.A1_BOTTOM_LEFT : BoardOrientation.A1_TOP_RIGHT);
+        }
+
+        /** EMPTY / WHITE / BLACK (UNKNOWN is reported as WHITE) in board order. */
+        public int[] boardColors(int orientation) {
             int[] g = new int[64];
             for (int rank = 0; rank < 8; rank++) {
                 for (int file = 0; file < 8; file++) {
-                    int sr = whiteAtBottom ? 7 - rank : rank;
-                    int sc = whiteAtBottom ? file : 7 - file;
+                    int sr = BoardOrientation.screenRowForSquare(rank, file, orientation);
+                    int sc = BoardOrientation.screenColumnForSquare(rank, file, orientation);
                     Cell c = cells[sr * 8 + sc];
                     g[rank * 8 + file] = c.occupied ? (c.color == BLACK ? BLACK : WHITE) : EMPTY;
                 }
@@ -215,24 +237,43 @@ public final class BoardReader {
             Result result = read(px, w, h, l, t, r, b,
                     START_DEV_THRESHOLDS[i], START_FILL_THRESHOLDS[i]);
             int occupied = 0;
-            int mismatch = 0;
+            int mismatch = Integer.MAX_VALUE;
             int falsePositives = 0;
             int missedPieces = 0;
             for (int row = 0; row < 8; row++) {
                 for (int col = 0; col < 8; col++) {
-                    boolean expected = row < 2 || row >= 6;
                     boolean detected = result.cells[row * 8 + col].occupied;
                     if (detected) {
                         occupied++;
                     }
-                    if (detected && !expected) {
-                        falsePositives++;
-                    } else if (!detected && expected) {
-                        missedPieces++;
+                }
+            }
+            for (int orientation : new int[]{
+                    BoardOrientation.A1_BOTTOM_LEFT, BoardOrientation.A1_TOP_RIGHT,
+                    BoardOrientation.A1_BOTTOM_RIGHT, BoardOrientation.A1_TOP_LEFT}) {
+                int currentMismatch = 0;
+                int currentFalsePositives = 0;
+                int currentMissedPieces = 0;
+                for (int row = 0; row < 8; row++) {
+                    for (int col = 0; col < 8; col++) {
+                        boolean expected = orientation == BoardOrientation.A1_BOTTOM_LEFT
+                                || orientation == BoardOrientation.A1_TOP_RIGHT
+                                ? row < 2 || row >= 6 : col < 2 || col >= 6;
+                        boolean detected = result.cells[row * 8 + col].occupied;
+                        if (detected && !expected) {
+                            currentFalsePositives++;
+                        } else if (!detected && expected) {
+                            currentMissedPieces++;
+                        }
+                        if (detected != expected) {
+                            currentMismatch++;
+                        }
                     }
-                    if (detected != expected) {
-                        mismatch++;
-                    }
+                }
+                if (currentMismatch < mismatch) {
+                    mismatch = currentMismatch;
+                    falsePositives = currentFalsePositives;
+                    missedPieces = currentMissedPieces;
                 }
             }
             if (best == null || mismatch < best.mismatch) {

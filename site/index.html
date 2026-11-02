@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChessBot Assist 1.5.18</title>
+<title>ChessBot Assist 1.5.19</title>
 <style>
   :root {
     color-scheme: dark;
@@ -88,64 +88,37 @@
 </head>
 <body>
 <main>
-  <span class="badge">Bản 1.5.18</span>
+  <span class="badge">Bản 1.5.19</span>
   <h1>ChessBot Assist</h1>
   <p class="sub">Stockfish và nhận diện bàn cờ chạy ngay trên điện thoại — nhận diện hoạt động offline.</p>
 
   <div class="card">
-    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.18/ChessBot-Assist-v1.5.18.apk">
-      ⬇ Tải APK (83 MB)
+    <a class="download" href="https://github.com/Quan3s/chessbot/releases/download/v1.5.19/ChessBot-Assist-v1.5.19.apk">
+      ⬇ Tải APK (86 MB)
     </a>
     <div class="meta">
       Android 8.0 – 16 · arm64-v8a + armeabi-v7a<br>
-      SHA-256: <code>1ca653cda76f6e4efc320ea62de19e62b6daaf9527d61786d11247f962f096c2</code>
+      SHA-256: <code>9de22d5b69e9eea9d73ef6bcd0e756904fdb48aa80a285df9cb4bcc7bd9f0323</code>
     </div>
 
-    <h2>Có gì mới ở 1.5.18</h2>
+    <h2>Có gì mới ở 1.5.19</h2>
     <ul>
-      <li><b>Sao chép toàn bộ nhật ký:</b> nút mới trong mục Nhật ký chép log hiện có vào clipboard, kèm số dòng đã sao chép.</li>
-      <li><b>Sửa đơn vị trả về của OpenCV:</b> <code>Mat.get()</code> trả byte, không phải số phần tử. 13 điểm float là 52 byte; không còn loại nhầm output đã đọc đủ.</li>
-      <li><b>Giữ sửa tensor 1.5.16:</b> đọc đủ 64 hàng × 13 lớp từ output CNN.</li>
-      <li><b>Sửa OpenCV không đọc đủ output:</b> tách tensor thành 64 hàng và lấy đủ điểm số cho từng ô; không còn loại kết quả vì chỉ đọc được hàng đầu tiên.</li>
-      <li><b>Chẩn đoán chi tiết:</b> nếu đọc tensor vẫn thất bại, nhật ký ghi hàng nào và số giá trị thực tế đọc được.</li>
-      <li><b>Giữ sửa occupancy 1.5.15:</b> không yêu cầu model phân loại đúng tên quân nếu occupancy và confidence khớp.</li>
-      <li><b>Sửa điều kiện bỏ qua OpenCV:</b> xác nhận khai cuộc dựa riêng vào occupancy, không từ chối kết quả đúng chỉ vì model đoán sai tên vua/tốt/quân khác.</li>
-      <li><b>Chẩn đoán rõ ràng:</b> nhật ký báo số ô occupancy OpenCV khớp trên 64, confidence, và liệu phân loại loại quân có hợp lý hay không.</li>
-      <li><b>Kiểm tra an toàn:</b> occupancy phải khớp chính xác 64/64 ô cùng confidence tối thiểu/trung bình đạt ngưỡng.</li>
-      <li><b>Sửa nạp OpenCV native:</b> nạp đúng thư viện theo ABI từ thư mục cài đặt, kiểm tra JNI và tạo <code>Mat</code> trước khi chạy model.</li>
-      <li><b>Chẩn đoán OpenCV:</b> lỗi native hiển thị rõ trong nhật ký để phân biệt với ngưỡng 26 của BoardReader dự phòng.</li>
-      <li><b>Sửa khởi tạo OpenCV:</b> nạp native runtime trước khi tạo ảnh/matrix, tránh lỗi <code>Mat.n_Mat()</code> khiến DNN không chạy.</li>
-      <li><b>Ngưỡng 26 được làm rõ:</b> đây là ngưỡng mặc định của BoardReader dự phòng, không phải ngưỡng OpenCV DNN; không lưu ngưỡng nếu bộ đọc chưa nhận diện bàn hợp lệ.</li>
-      <li><b>Chuyển sang OpenCV Android DNN:</b> OpenCV xử lý ảnh và chạy CNN trên CPU ngay trong ứng dụng; bỏ ONNX Runtime Web và WebView nhận diện.</li>
-      <li><b>Phân loại toàn bàn:</b> model đọc loại và màu quân trên 64 ô mỗi lần quét, không phụ thuộc việc bộ nhận diện cũ có phát hiện bàn đổi hay không.</li>
-      <li><b>Chạy hoàn toàn offline:</b> ảnh không rời khỏi thiết bị; bot chỉ dùng thế cờ tin cậy và khớp luật.</li>
-      <li><b>Sửa gửi thao tác chạm/kéo:</b> cử chỉ có thời lượng ổn định hơn; nhật ký phân biệt Android từ chối, hủy hoặc không phản hồi.</li>
-      <li><b>Kiểm tra kết nối Trợ năng:</b> trạng thái dịch vụ được xóa đúng lúc Android ngắt kết nối.</li>
-      <li><b>Model OpenCV-Chess-Bot:</b> nhận diện loại quân và màu quân trên cả 64 ô, kể cả trong thế cờ giữa ván; chạy hoàn toàn offline.</li>
-      <li><b>Quét độc lập với bộ đọc cũ:</b> model kiểm tra định kỳ ngay cả khi BoardReader bỏ sót thay đổi bàn cờ.</li>
-      <li><b>Kiểm tra an toàn:</b> chỉ nhận nước đi khi model đủ tin cậy và bàn cờ khớp nước hợp lệ.</li>
-      <li><b>Giữ nguyên tính năng 1.5.7:</b> nhận diện dựa trên v1.5.2, chẩn đoán rõ hơn và tải/chọn Stockfish tùy chỉnh.</li>
-      <li><b>Nhận diện dựa trên v1.5.2:</b> giữ ngưỡng gốc làm lựa chọn đầu tiên, đồng thời thử thêm ngưỡng tương phản rộng hơn cho các kiểu bàn khác nhau.</li>
-      <li><b>Chẩn đoán rõ hơn:</b> nhật ký nêu riêng số ô trống nhận nhầm và số quân bị bỏ sót.</li>
-      <li><b>Không dừng khi không tự nhận ra hướng:</b> xác định hướng bằng màu quân và độ tương phản; nếu ảnh không đủ thông tin, dùng hướng theo màu bot đã chọn và ghi cảnh báo trong nhật ký.</li>
-      <li><b>Nhận diện nước trong ván ổn định hơn:</b> thử nhiều ngưỡng tương phản và xác nhận cùng một nước hợp lệ qua các khung hình liên tiếp.</li>
-      <li><b>Nhận diện bàn cờ ban đầu:</b> lấy nhiều khung hình, tự điều chỉnh ngưỡng theo vị trí khai cuộc và ghi nhớ ngưỡng tốt nhất.</li>
-      <li><b>Tiến trình tải Stockfish:</b> xem phần trăm và dung lượng đã tải; trạng thái đổi rõ ràng khi xác minh, giải nén và kiểm tra engine.</li>
-      <li><b>Sửa tải Stockfish:</b> tránh nhận nhầm tài liệu trong gói tải về thành engine.</li>
-      <li><b>Tải và chọn Stockfish:</b> lấy danh sách phiên bản Android chính thức, kiểm tra SHA-256, tải và chọn phiên bản đã cài; Stockfish 16 vẫn có sẵn.</li>
-      <li><b>Tùy chỉnh CPU/RAM:</b> chọn số nhân CPU và RAM Hash hoặc để tự động theo thiết bị.</li>
-      <li><b>Giữ nguyên tính năng cũ:</b> nhận diện bộ quân, tải/chọn engine, tùy chỉnh CPU/RAM Hash, Skill 20 và tối đa 10000 ms/nước.</li>
+      <li><b>LiveChess2FEN MobileNetV2:</b> model ONNX 224×224 RGB chính thức phân loại 64 ô, chạy hoàn toàn offline.</li>
+      <li><b>Cắt thủ công:</b> chỉ vùng bàn cờ đã hiệu chỉnh được chia ô và gửi vào model; không dùng dò bàn cờ toàn màn hình hoặc OpenCV.</li>
+      <li><b>Dùng thế cờ trước:</b> đối chiếu xác suất model với các nước hợp lệ để giải quyết ô phân loại nhầm, chỉ đi khi có kết quả rõ ràng.</li>
+      <li><b>Hướng bàn:</b> tự nhận diện hoặc chọn góc a1; hỗ trợ xoay 90° và 180° cho nhận diện và thao tác đi quân.</li>
+      <li><b>Giấy phép:</b> kèm AGPL-3.0, ghi công LiveChess2FEN và giấy phép ONNX Runtime trong mã nguồn và APK.</li>
     </ul>
 
     <h2>Cài / cập nhật</h2>
     <ul>
       <li>Tải file, mở trên điện thoại, cho phép “Cài đặt ứng dụng không rõ nguồn gốc” nếu Android hỏi.</li>
-      <li>APK 1.5.18 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
+      <li>APK 1.5.19 dùng cùng khóa ký với các bản trước; có thể cập nhật trực tiếp và giữ dữ liệu.</li>
       <li>Nếu Play Protect cảnh báo, chọn “Vẫn cài đặt”.</li>
     </ul>
 
     <div class="note">
-      <b>Nhận diện bàn cờ chạy offline bằng OpenCV DNN.</b> OpenCV xử lý ảnh và chạy model phân loại quân trên 64 ô ngay trên thiết bị. Bot chỉ dùng kết quả đủ tin cậy và khớp với nước đi hợp lệ; nếu không chắc, bot dùng bộ đọc dự phòng hoặc chờ, không đoán bừa.
+      <b>Nhận diện bàn cờ chạy offline bằng ONNX Runtime.</b> Model LiveChess2FEN chỉ nhận vùng bàn cờ đã hiệu chỉnh, phân loại 64 ô rồi đối chiếu thế cờ trước và luật cờ. Kết quả không đủ tin cậy thì bot chờ hoặc dùng bộ đọc dự phòng, không đoán bừa.
     </div>
   </div>
 

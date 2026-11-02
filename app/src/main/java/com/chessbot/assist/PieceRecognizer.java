@@ -177,14 +177,20 @@ public final class PieceRecognizer {
      */
     public Recognized classifyBoard(int[] px, int w, int h, BoardReader.Result res,
                                     boolean whiteAtBottom) {
+        return classifyBoard(px, w, h, res, whiteAtBottom
+                ? BoardOrientation.A1_BOTTOM_LEFT : BoardOrientation.A1_TOP_RIGHT);
+    }
+
+    public Recognized classifyBoard(int[] px, int w, int h, BoardReader.Result res,
+                                    int orientation) {
         Recognized out = new Recognized();
         if (px == null || res == null || !isReady()) {
             return out;
         }
         for (int rank = 0; rank < 8; rank++) {
             for (int file = 0; file < 8; file++) {
-                int sr = whiteAtBottom ? 7 - rank : rank;
-                int sc = whiteAtBottom ? file : 7 - file;
+                int sr = BoardOrientation.screenRowForSquare(rank, file, orientation);
+                int sc = BoardOrientation.screenColumnForSquare(rank, file, orientation);
                 int screen = sr * 8 + sc;
                 int board = rank * 8 + file;
                 BoardReader.Cell cell = res.cells[screen];

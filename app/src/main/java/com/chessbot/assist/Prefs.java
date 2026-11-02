@@ -11,6 +11,8 @@ public final class Prefs {
     public static final int ORIENT_AUTO = 0;
     public static final int ORIENT_WHITE_BOTTOM = 1;
     public static final int ORIENT_WHITE_TOP = 2;
+    public static final int ORIENT_WHITE_RIGHT = 3;
+    public static final int ORIENT_WHITE_LEFT = 4;
 
     public static final int TAP_TAP = 0;
     public static final int TAP_DRAG = 1;

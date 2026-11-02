@@ -43,11 +43,13 @@ public final class GameController {
     private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
     private static final float START_MIN_MODEL_CONFIDENCE = 0.25f;
     private static final float START_MEAN_MODEL_CONFIDENCE = 0.90f;
+    private static final float MIN_VISION_MOVE_SCORE_GAIN = 2.5f;
+    private static final float MIN_VISION_MOVE_SCORE_GAP = 2.0f;
     private static final long RECOGNITION_INTERVAL_MS = 600;
 
     private final Context ctx;
     private final ScreenCapture capture;
-    private final OpenCvChessRecognizer chessVision;
+    private final OnnxChessRecognizer chessVision;
     private final Listener listener;
     private final Board board = new Board();
     private final StockfishEngine engine;
@@ -61,7 +63,7 @@ public final class GameController {
 
     private volatile boolean running;
     private Thread thread;
-    private boolean whiteAtBottom = true;
+    private int a1Position = BoardOrientation.A1_BOTTOM_LEFT;
     private Side botSide = Side.WHITE;
     private int tapMode;
     /** True only when the shape templates were learned and self-checked. */
@@ -69,9 +71,9 @@ public final class GameController {
     private boolean visionFallbackLogged;
     private long lastVisionScanAt;
     private long lastReliableVisionAt;
-    private OpenCvChessRecognizer.Result lastReliableVision;
+    private OnnxChessRecognizer.Result lastReliableVision;
 
-    public GameController(Context ctx, ScreenCapture capture, OpenCvChessRecognizer chessVision,
+    public GameController(Context ctx, ScreenCapture capture, OnnxChessRecognizer chessVision,
                           int screenW, int screenH,
                           Listener listener) {
         this.ctx = ctx;
@@ -132,7 +134,7 @@ public final class GameController {
             String sideText = botSide == Side.WHITE ? "Trắng" : "Đen";
             listener.onStatus("Bot cầm " + sideText);
             EventLog.add("Sẵn sàng — bot cầm " + sideText + ", "
-                    + (whiteAtBottom ? "Trắng ở dưới" : "Trắng ở trên"));
+                    + "a1 ở góc " + BoardOrientation.label(a1Position));
 
             int[] lastGrid = null;
             BoardReader.Result baseline = null;
@@ -156,9 +158,9 @@ public final class GameController {
                 BoardReader.Result res = BoardReader.read(frame.pixels, frame.width, frame.height,
                         rect[0], rect[1], rect[2], rect[3],
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
-                int[] readerGrid = res.boardOccupancy(whiteAtBottom);
+                int[] readerGrid = res.boardOccupancy(a1Position);
                 long now = SystemClock.elapsedRealtime();
-                OpenCvChessRecognizer.Result pieceRead = null;
+                OnnxChessRecognizer.Result pieceRead = null;
                 if (now - lastVisionScanAt >= RECOGNITION_INTERVAL_MS) {
                     pieceRead = recognizeWithChessVision(frame);
                 } else if (lastReliableVision != null
@@ -167,9 +169,23 @@ public final class GameController {
                 }
                 boolean usedChessVision = pieceRead != null
                         && pieceRead.reliable && pieceRead.plausible;
-                boolean pieceReadWhiteBottom = whiteAtBottom;
-                int[] grid = usedChessVision
-                        ? pieceRead.boardOccupancy(pieceReadWhiteBottom) : readerGrid;
+                Move visionMoveCandidate = null;
+                boolean visionLikelihoodMove = false;
+                if (usedChessVision) {
+                    visionMoveCandidate = findMoveByPlacement(
+                            pieceRead.placementFor(a1Position));
+                    if (visionMoveCandidate == null) {
+                        visionMoveCandidate = findMoveByVisionLikelihood(pieceRead, a1Position);
+                        visionLikelihoodMove = visionMoveCandidate != null;
+                    }
+                    if (tapPending && pending != null
+                            && !pending.equals(visionMoveCandidate)) {
+                        visionMoveCandidate = null;
+                        visionLikelihoodMove = false;
+                    }
+                }
+                int[] grid = usedChessVision && visionMoveCandidate != null
+                        ? boardOccupancyAfterMove(visionMoveCandidate) : readerGrid;
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
                     stable++;
                 } else {
@@ -200,15 +216,16 @@ public final class GameController {
                     // ambiguous case of two identical-looking captures
                     // (e.g. a knight can take either of two identical pawns).
                     Move move = null;
+                    boolean moveResolvedByVisionLikelihood = false;
                     if (tapPending && pending != null && matchesMove(grid, pending)) {
                         move = pending;
                     } else {
                         Move occupancyMove = null;
                         boolean exactPieceMove = false;
                         if (usedChessVision) {
-                            occupancyMove = findMoveByPlacement(
-                                    pieceRead.placementFor(pieceReadWhiteBottom));
+                            occupancyMove = visionMoveCandidate;
                             exactPieceMove = occupancyMove != null;
+                            moveResolvedByVisionLikelihood = visionLikelihoodMove;
                         }
                         if (occupancyMove == null) {
                             occupancyMove = findMoveWithThresholdFallback(
@@ -258,7 +275,7 @@ public final class GameController {
                             // replacement for the occupancy match. They are
                             // accepted only when unique and clearly better.
                             PieceRecognizer.Recognized rec = recognizer.classifyBoard(
-                                    frame.pixels, frame.width, frame.height, res, whiteAtBottom);
+                                    frame.pixels, frame.width, frame.height, res, a1Position);
                             Move typedMove = chooseTypedMove(grid, rec);
                             if (typedMove != null && !typedMove.equals(move)) {
                                 EventLog.add("Nhận diện quân xác nhận: " + uci(typedMove)
@@ -268,6 +285,10 @@ public final class GameController {
                                 move = typedMove;
                             }
                         }
+                    }
+                    if (moveResolvedByVisionLikelihood) {
+                        EventLog.add("LiveChess2FEN + vị trí trước xác nhận nước "
+                                + uci(move));
                     }
                     Side mover = board.getSideToMove();
                     board.doMove(move);
@@ -398,29 +419,35 @@ public final class GameController {
 
         board.clear();
         board.loadFromFen(START_FEN);
-        OpenCvChessRecognizer.Result pieceRead = recognizeWithChessVision(frame);
+        OnnxChessRecognizer.Result pieceRead = recognizeWithChessVision(frame);
+        if (pieceRead != null) {
+            EventLog.add("ONNX lưới dự đoán (theo ảnh chụp, dấu chấm là ô trống):\n"
+                    + pieceRead.screenRows);
+            EventLog.add("LiveChess2FEN: a1 ở góc " + BoardOrientation.label(
+                    pieceRead.a1Position));
+        }
         int orient = Prefs.getOrientation(ctx);
-        boolean recognizedWhiteAtBottom = orient == Prefs.ORIENT_WHITE_BOTTOM
-                || (orient == Prefs.ORIENT_AUTO && pieceRead != null
-                        && pieceRead.whiteAtBottom);
+        int selectedOrientation = BoardOrientation.fromPreference(orient);
+        int recognizedOrientation = orient == Prefs.ORIENT_AUTO && pieceRead != null
+                ? pieceRead.a1Position : selectedOrientation;
         boolean exactModelStart = pieceRead != null && pieceRead.reliable
                 && pieceRead.plausible
-                && START_PLACEMENT.equals(pieceRead.placementFor(recognizedWhiteAtBottom));
+                && START_PLACEMENT.equals(pieceRead.placementFor(recognizedOrientation));
         int modelOccupancyMatches = pieceRead == null ? 0
-                : startingOccupancyMatches(pieceRead.boardOccupancy(recognizedWhiteAtBottom));
+                : startingOccupancyMatches(pieceRead.boardOccupancy(recognizedOrientation));
         boolean confidentModelStart = pieceRead != null
                 && pieceRead.minConfidence >= START_MIN_MODEL_CONFIDENCE
                 && pieceRead.meanConfidence >= START_MEAN_MODEL_CONFIDENCE
                 && modelOccupancyMatches == 64;
         if (exactModelStart || confidentModelStart) {
-            whiteAtBottom = recognizedWhiteAtBottom;
+            a1Position = recognizedOrientation;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
             if (startRead.isValid()) {
                 Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
             }
             EventLog.add((exactModelStart
-                    ? "OpenCV DNN xác nhận chính xác vị trí đầu"
-                    : "OpenCV DNN xác nhận occupancy 32 quân ở đúng hàng khai cuộc"
+                    ? "ONNX xác nhận chính xác vị trí đầu"
+                    : "ONNX xác nhận occupancy 32 quân ở đúng hàng khai cuộc"
                             + (pieceRead.plausible ? "" : " dù phân loại loại quân chưa hợp lý"))
                     + ", độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
@@ -431,13 +458,13 @@ public final class GameController {
         int mismatch = startRead.mismatch;
         int occ = startRead.occupied;
         if (pieceRead != null) {
-            EventLog.add("OpenCV DNN không xác nhận khai cuộc: độ tin cậy tối thiểu "
+            EventLog.add("ONNX không xác nhận khai cuộc: độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
                     + Math.round(pieceRead.meanConfidence * 100) + "%, thế cờ hợp lý "
                     + (pieceRead.plausible ? "có" : "không")
                     + ", occupancy khai cuộc khớp " + modelOccupancyMatches + "/64 ô");
         } else {
-            EventLog.add("OpenCV DNN không trả kết quả; kiểm tra nhật ký lỗi OpenCV phía trên.");
+            EventLog.add("ONNX không trả kết quả; kiểm tra lỗi ONNX Runtime phía trên.");
         }
         EventLog.add("Kiểm tra vị trí đầu: " + startRead.falsePositives
                 + " ô trống nhận nhầm là có quân, " + startRead.missedPieces
@@ -449,38 +476,12 @@ public final class GameController {
                     + "bàn cờ và bảo đảm nút nổi không che quân.";
         }
 
-        if (orient == Prefs.ORIENT_WHITE_BOTTOM) {
-            whiteAtBottom = true;
-        } else if (orient == Prefs.ORIENT_WHITE_TOP) {
-            whiteAtBottom = false;
-        } else {
-            int topN = res.occupiedInRows(0, 1);
-            int botN = res.occupiedInRows(6, 7);
-            float topL = res.avgPieceHigh(0, 1);
-            float botL = res.avgPieceHigh(6, 7);
-            float topContrast = res.avgPieceContrast(0, 1);
-            float botContrast = res.avgPieceContrast(6, 7);
-            int topWhite = countPieceColor(res, 0, 1, BoardReader.WHITE);
-            int topBlack = countPieceColor(res, 0, 1, BoardReader.BLACK);
-            int bottomWhite = countPieceColor(res, 6, 7, BoardReader.WHITE);
-            int bottomBlack = countPieceColor(res, 6, 7, BoardReader.BLACK);
-            EventLog.add("Hướng bàn cờ: trên " + topN + " quân (độ tương phản "
-                    + Math.round(topContrast) + "), dưới " + botN + " quân (độ tương phản "
-                    + Math.round(botContrast) + ")");
-            int colorOrientationScore =
-                    topBlack + bottomWhite - topWhite - bottomBlack;
-            if (Math.abs(colorOrientationScore) >= 4) {
-                whiteAtBottom = colorOrientationScore > 0;
-            } else if (Math.abs(botContrast - topContrast) >= 8) {
-                whiteAtBottom = botContrast > topContrast;
-            } else if (Math.abs(topL - botL) >= 8) {
-                whiteAtBottom = botL > topL;
-            } else {
-                whiteAtBottom = Prefs.isBotWhite(ctx);
-                EventLog.add("Không tự phân biệt được hướng bàn cờ; tạm dùng hướng theo "
-                        + "màu bot đã chọn. Nếu bàn cờ bị lật, chọn hướng thủ công trong Cài đặt.");
-            }
-        }
+        a1Position = orient == Prefs.ORIENT_AUTO
+                ? (pieceRead != null && pieceRead.plausible ? pieceRead.a1Position
+                        : BoardOrientation.inferFromScreenColors(res.screenColors()))
+                : selectedOrientation;
+        EventLog.add("Hướng bàn cờ: a1 ở góc " + BoardOrientation.label(a1Position)
+                + (pieceRead == null ? " (BoardReader)" : " (LiveChess2FEN)"));
 
         Prefs.setBoardThresholds(ctx, startRead.devThreshold, startRead.fillThreshold);
         botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
@@ -503,18 +504,18 @@ public final class GameController {
         return matches;
     }
 
-    private OpenCvChessRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
+    private OnnxChessRecognizer.Result recognizeWithChessVision(ScreenCapture.Frame frame) {
         if (chessVision == null) {
             return null;
         }
         lastVisionScanAt = SystemClock.elapsedRealtime();
         try {
-            OpenCvChessRecognizer.Result result = chessVision.recognize(frame, rect);
+            OnnxChessRecognizer.Result result = chessVision.recognize(frame, rect);
             if (result != null && result.reliable && result.plausible) {
                 lastReliableVision = result;
                 lastReliableVisionAt = lastVisionScanAt;
                 if (visionFallbackLogged) {
-                    EventLog.add("OpenCV DNN nhận diện ổn định trở lại");
+                    EventLog.add("ONNX nhận diện ổn định trở lại");
                     visionFallbackLogged = false;
                 }
                 return result;
@@ -522,8 +523,8 @@ public final class GameController {
             lastReliableVision = null;
             if (!visionFallbackLogged) {
                 EventLog.add(result == null
-                        ? "OpenCV chưa đọc được bàn cờ; dùng nhận diện dự phòng."
-                        : "OpenCV chưa đủ tin cậy (tối thiểu "
+                        ? "ONNX chưa đọc được bàn cờ; dùng nhận diện dự phòng."
+                        : "ONNX chưa đủ tin cậy (tối thiểu "
                                 + Math.round(result.minConfidence * 100)
                                 + "%); dùng nhận diện dự phòng.");
                 visionFallbackLogged = true;
@@ -532,7 +533,7 @@ public final class GameController {
         } catch (Exception e) {
             lastReliableVision = null;
             if (!visionFallbackLogged) {
-                EventLog.add("OpenCV lỗi, dùng nhận diện dự phòng: " + e);
+                EventLog.add("ONNX Runtime lỗi, dùng nhận diện dự phòng: " + e);
                 visionFallbackLogged = true;
             }
             return null;
@@ -552,6 +553,48 @@ public final class GameController {
             }
         }
         return matched;
+    }
+
+    private Move findMoveByVisionLikelihood(OnnxChessRecognizer.Result vision,
+                                            int orientation) {
+        String currentFen = board.getFen();
+        String currentPlacement = currentFen.substring(0, currentFen.indexOf(' '));
+        float currentScore;
+        try {
+            currentScore = vision.logLikelihoodForPlacement(currentPlacement, orientation);
+            float bestScore = currentScore;
+            float secondScore = Float.NEGATIVE_INFINITY;
+            Move bestMove = null;
+            for (Move candidate : board.legalMoves()) {
+                Board after = board.clone();
+                after.doMove(candidate);
+                String afterFen = after.getFen();
+                String afterPlacement = afterFen.substring(0, afterFen.indexOf(' '));
+                float score = vision.logLikelihoodForPlacement(afterPlacement, orientation);
+                if (score > bestScore) {
+                    secondScore = bestScore;
+                    bestScore = score;
+                    bestMove = candidate;
+                } else if (score > secondScore) {
+                    secondScore = score;
+                }
+            }
+
+            if (bestMove == null
+                    || bestScore - currentScore < MIN_VISION_MOVE_SCORE_GAIN
+                    || bestScore - secondScore < MIN_VISION_MOVE_SCORE_GAP) {
+                return null;
+            }
+            return bestMove;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Invalid LiveChess2FEN placement", e);
+        }
+    }
+
+    private int[] boardOccupancyAfterMove(Move move) {
+        Board after = board.clone();
+        after.doMove(move);
+        return boardOccupancy(after);
     }
 
     private boolean matchesPlacement(Board position, String placement) {
@@ -592,19 +635,6 @@ public final class GameController {
             }
         }
         return true;
-    }
-
-    private int countPieceColor(BoardReader.Result result, int rowFrom, int rowTo, int color) {
-        int count = 0;
-        for (int row = rowFrom; row <= rowTo; row++) {
-            for (int col = 0; col < 8; col++) {
-                BoardReader.Cell cell = result.cells[row * 8 + col];
-                if (cell.occupied && cell.color == color) {
-                    count++;
-                }
-            }
-        }
-        return count;
     }
 
     private StartFrame captureStartingPosition() {
@@ -705,7 +735,7 @@ public final class GameController {
         }
 
         PieceRecognizer.Recognized rec = recognizer.classifyBoard(
-                frame.pixels, frame.width, frame.height, res, whiteAtBottom);
+                frame.pixels, frame.width, frame.height, res, a1Position);
         int typeOk = 0;
         int colorOk = 0;
         for (Square s : Square.values()) {
@@ -827,7 +857,7 @@ public final class GameController {
                     frame.pixels, frame.width, frame.height,
                     rect[0], rect[1], rect[2], rect[3],
                     devThresholds[i], fillThresholds[i]);
-            int[] candidateGrid = candidateRead.boardOccupancy(whiteAtBottom);
+            int[] candidateGrid = candidateRead.boardOccupancy(a1Position);
             Move candidate = findMove(candidateGrid, candidateRead, before);
             if (candidate == null) {
                 continue;
@@ -937,8 +967,8 @@ public final class GameController {
     private int screenIndex(Square s) {
         int rank = s.ordinal() / 8;
         int file = s.ordinal() % 8;
-        int sr = whiteAtBottom ? 7 - rank : rank;
-        int sc = whiteAtBottom ? file : 7 - file;
+        int sr = BoardOrientation.screenRowForSquare(rank, file, a1Position);
+        int sc = BoardOrientation.screenColumnForSquare(rank, file, a1Position);
         return sr * 8 + sc;
     }
 
@@ -998,8 +1028,8 @@ public final class GameController {
     private int[] squareCenter(Square square) {
         int rank = square.ordinal() / 8;
         int file = square.ordinal() % 8;
-        int sr = whiteAtBottom ? 7 - rank : rank;
-        int sc = whiteAtBottom ? file : 7 - file;
+        int sr = BoardOrientation.screenRowForSquare(rank, file, a1Position);
+        int sc = BoardOrientation.screenColumnForSquare(rank, file, a1Position);
         float x = (rect[0] + (sc + 0.5f) / 8f * (rect[2] - rect[0])) * screenW;
         float y = (rect[1] + (sr + 0.5f) / 8f * (rect[3] - rect[1])) * screenH;
         return new int[]{Math.round(x), Math.round(y)};
