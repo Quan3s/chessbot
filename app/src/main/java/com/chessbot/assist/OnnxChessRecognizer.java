@@ -94,6 +94,17 @@ public final class OnnxChessRecognizer {
 
         public float logLikelihoodForPlacement(String placement, int orientation)
                 throws IOException {
+            return logLikelihoodForPlacement(placement, orientation, true);
+        }
+
+        public float logOccupancyLikelihoodForPlacement(String placement, int orientation)
+                throws IOException {
+            return logLikelihoodForPlacement(placement, orientation, false);
+        }
+
+        private float logLikelihoodForPlacement(String placement, int orientation,
+                                                boolean includePieceType)
+                throws IOException {
             String[] ranks = placement.split("/");
             if (ranks.length != 8) {
                 throw new IOException("Invalid chess placement for ONNX scoring");
@@ -114,7 +125,9 @@ public final class OnnxChessRecognizer {
                     if (pieceClass < 0 || file >= 8) {
                         throw new IOException("Invalid piece in ONNX scoring placement");
                     }
-                    likelihood += logProbability(fenRow, file, orientation, pieceClass);
+                    likelihood += includePieceType
+                            ? logProbability(fenRow, file, orientation, pieceClass)
+                            : logOccupiedProbability(fenRow, file, orientation);
                     file++;
                 }
                 if (file != 8) {
@@ -130,6 +143,19 @@ public final class OnnxChessRecognizer {
             int screenCol = BoardOrientation.screenColumnForFenRow(fenRow, file, orientation);
             float probability =
                     probabilities[(screenRow * 8 + screenCol) * CLASS_COUNT + pieceClass];
+            return (float) Math.log(Math.max(probability, 1e-8f));
+        }
+
+        private float logOccupiedProbability(int fenRow, int file, int orientation) {
+            int screenRow = BoardOrientation.screenRowForFenRow(fenRow, file, orientation);
+            int screenCol = BoardOrientation.screenColumnForFenRow(fenRow, file, orientation);
+            int offset = (screenRow * 8 + screenCol) * CLASS_COUNT;
+            float probability = 0;
+            for (int pieceClass = 0; pieceClass < CLASS_COUNT; pieceClass++) {
+                if (pieceClass != 6) {
+                    probability += probabilities[offset + pieceClass];
+                }
+            }
             return (float) Math.log(Math.max(probability, 1e-8f));
         }
     }

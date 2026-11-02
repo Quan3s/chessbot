@@ -16,7 +16,7 @@ LIB="$ROOT/libs/chesslib-1.3.3.jar"
 ORT_VERSION="1.20.0"
 ORT_AAR="$DEPS/onnxruntime-android-$ORT_VERSION.aar"
 ORT_SHA256="07a8f71ef890afed8c6087a56220e6d558a492804276ee2dd7cb7f6262242027"
-NAME="ChessBot-Assist-v1.5.19"
+NAME="ChessBot-Assist-v1.5.20"
 
 mkdir -p "$OUT" "$DEPS"
 rm -rf "$WORK"
@@ -46,8 +46,8 @@ echo "[1/6] resources"
     --java "$WORK/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 25 \
-    --version-name "1.5.19" \
+    --version-code 26 \
+    --version-name "1.5.20" \
     --auto-add-overlay \
     "$WORK/res.zip"
 

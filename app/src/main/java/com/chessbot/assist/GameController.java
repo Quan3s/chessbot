@@ -43,9 +43,11 @@ public final class GameController {
     private static final String START_PLACEMENT = START_FEN.substring(0, START_FEN.indexOf(' '));
     private static final float START_MIN_MODEL_CONFIDENCE = 0.25f;
     private static final float START_MEAN_MODEL_CONFIDENCE = 0.90f;
+    private static final int MIN_RECOVERED_START_OCCUPANCY_MATCHES = 54;
+    private static final float MIN_RECOVERED_START_MEAN_CONFIDENCE = 0.85f;
     private static final float MIN_VISION_MOVE_SCORE_GAIN = 2.5f;
     private static final float MIN_VISION_MOVE_SCORE_GAP = 2.0f;
-    private static final long RECOGNITION_INTERVAL_MS = 600;
+    private static final long RECOGNITION_INTERVAL_MS = 2500;
 
     private final Context ctx;
     private final ScreenCapture capture;
@@ -167,15 +169,17 @@ public final class GameController {
                         && now - lastReliableVisionAt <= RECOGNITION_INTERVAL_MS + 350) {
                     pieceRead = lastReliableVision;
                 }
-                boolean usedChessVision = pieceRead != null
-                        && pieceRead.reliable && pieceRead.plausible;
+                boolean usedChessVision = pieceRead != null && pieceRead.reliable;
                 Move visionMoveCandidate = null;
                 boolean visionLikelihoodMove = false;
                 if (usedChessVision) {
-                    visionMoveCandidate = findMoveByPlacement(
-                            pieceRead.placementFor(a1Position));
+                    if (pieceRead.plausible) {
+                        visionMoveCandidate = findMoveByPlacement(
+                                pieceRead.placementFor(a1Position));
+                    }
                     if (visionMoveCandidate == null) {
-                        visionMoveCandidate = findMoveByVisionLikelihood(pieceRead, a1Position);
+                        visionMoveCandidate = findMoveByVisionLikelihood(
+                                pieceRead, a1Position, pieceRead.plausible);
                         visionLikelihoodMove = visionMoveCandidate != null;
                     }
                     if (tapPending && pending != null
@@ -439,7 +443,10 @@ public final class GameController {
                 && pieceRead.minConfidence >= START_MIN_MODEL_CONFIDENCE
                 && pieceRead.meanConfidence >= START_MEAN_MODEL_CONFIDENCE
                 && modelOccupancyMatches == 64;
-        if (exactModelStart || confidentModelStart) {
+        boolean recoveredModelStart = pieceRead != null && pieceRead.reliable
+                && pieceRead.meanConfidence >= MIN_RECOVERED_START_MEAN_CONFIDENCE
+                && modelOccupancyMatches >= MIN_RECOVERED_START_OCCUPANCY_MATCHES;
+        if (exactModelStart || confidentModelStart || recoveredModelStart) {
             a1Position = recognizedOrientation;
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
             if (startRead.isValid()) {
@@ -447,8 +454,12 @@ public final class GameController {
             }
             EventLog.add((exactModelStart
                     ? "ONNX xác nhận chính xác vị trí đầu"
-                    : "ONNX xác nhận occupancy 32 quân ở đúng hàng khai cuộc"
-                            + (pieceRead.plausible ? "" : " dù phân loại loại quân chưa hợp lý"))
+                    : recoveredModelStart && !confidentModelStart
+                            ? "ONNX xác nhận gần đúng occupancy khai cuộc "
+                                    + modelOccupancyMatches + "/64 ô"
+                                    + (pieceRead.plausible ? "" : "; sẽ đối chiếu nước đi theo occupancy")
+                            : "ONNX xác nhận occupancy 32 quân ở đúng hàng khai cuộc"
+                                    + (pieceRead.plausible ? "" : " dù phân loại loại quân chưa hợp lý"))
                     + ", độ tin cậy tối thiểu "
                     + Math.round(pieceRead.minConfidence * 100) + "%, trung bình "
                     + Math.round(pieceRead.meanConfidence * 100) + "%");
@@ -511,12 +522,18 @@ public final class GameController {
         lastVisionScanAt = SystemClock.elapsedRealtime();
         try {
             OnnxChessRecognizer.Result result = chessVision.recognize(frame, rect);
-            if (result != null && result.reliable && result.plausible) {
+            lastVisionScanAt = SystemClock.elapsedRealtime();
+            if (result != null && result.reliable) {
                 lastReliableVision = result;
                 lastReliableVisionAt = lastVisionScanAt;
-                if (visionFallbackLogged) {
+                if (result.plausible && visionFallbackLogged) {
                     EventLog.add("ONNX nhận diện ổn định trở lại");
                     visionFallbackLogged = false;
+                }
+                if (!result.plausible && !visionFallbackLogged) {
+                    EventLog.add("ONNX đọc được occupancy nhưng loại quân chưa hợp lý; "
+                            + "chỉ dùng khi khớp nước hợp lệ theo xác suất");
+                    visionFallbackLogged = true;
                 }
                 return result;
             }
@@ -531,6 +548,7 @@ public final class GameController {
             }
             return result;
         } catch (Exception e) {
+            lastVisionScanAt = SystemClock.elapsedRealtime();
             lastReliableVision = null;
             if (!visionFallbackLogged) {
                 EventLog.add("ONNX Runtime lỗi, dùng nhận diện dự phòng: " + e);
@@ -556,12 +574,15 @@ public final class GameController {
     }
 
     private Move findMoveByVisionLikelihood(OnnxChessRecognizer.Result vision,
-                                            int orientation) {
+                                            int orientation, boolean includePieceType) {
         String currentFen = board.getFen();
         String currentPlacement = currentFen.substring(0, currentFen.indexOf(' '));
         float currentScore;
         try {
-            currentScore = vision.logLikelihoodForPlacement(currentPlacement, orientation);
+            currentScore = includePieceType
+                    ? vision.logLikelihoodForPlacement(currentPlacement, orientation)
+                    : vision.logOccupancyLikelihoodForPlacement(
+                            currentPlacement, orientation);
             float bestScore = currentScore;
             float secondScore = Float.NEGATIVE_INFINITY;
             Move bestMove = null;
@@ -570,7 +591,9 @@ public final class GameController {
                 after.doMove(candidate);
                 String afterFen = after.getFen();
                 String afterPlacement = afterFen.substring(0, afterFen.indexOf(' '));
-                float score = vision.logLikelihoodForPlacement(afterPlacement, orientation);
+                float score = includePieceType
+                        ? vision.logLikelihoodForPlacement(afterPlacement, orientation)
+                        : vision.logOccupancyLikelihoodForPlacement(afterPlacement, orientation);
                 if (score > bestScore) {
                     secondScore = bestScore;
                     bestScore = score;

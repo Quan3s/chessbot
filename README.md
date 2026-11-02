@@ -8,7 +8,7 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.19.apk`.
+APK sau khi build: `build/ChessBot-Assist-v1.5.20.apk`.
 
 **Bản 1.5.7:** quay về ngưỡng nhận diện gốc của v1.5.2 làm lựa chọn đầu tiên, đồng thời thử thêm các ngưỡng tương phản rộng hơn khi cần. Nhật ký nay ghi rõ số ô trống bị nhận nhầm, số quân bị bỏ sót và thông báo lỗi cũng nêu đúng hai loại sai lệch này.
 
@@ -36,11 +36,13 @@ APK sau khi build: `build/ChessBot-Assist-v1.5.19.apk`.
 
 **Bản 1.5.19:** thay model nhận diện bằng LiveChess2FEN MobileNetV2 chính thức. Ảnh chụp được cắt đúng vùng bàn cờ đã hiệu chỉnh, chia 64 ô, resize và chuẩn hoá RGB theo MobileNetV2 rồi chạy ONNX Runtime trực tiếp trên thiết bị; không gửi ảnh toàn màn hình cho model và không dùng OpenCV.
 
+**Bản 1.5.20:** khi model nhận đúng phần lớn ô có quân nhưng phân loại sai loại quân, bot vẫn kiểm tra nước đi bằng xác suất occupancy và danh sách nước hợp lệ thay vì rơi hẳn về BoardReader. Khai cuộc chỉ được khôi phục nếu ít nhất 54/64 ô occupancy khớp và confidence đủ cao; thêm khoảng nghỉ sau mỗi lần quét ONNX để tránh quét lặp liên tục trên thiết bị chậm.
+
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.19.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.20.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
@@ -197,7 +199,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.19.apk
+# -> build/ChessBot-Assist-v1.5.20.apk
 ```
 
 Script chạy tuần tự: tải/xác minh ONNX Runtime Android → `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + model → `zipalign` → `apksigner`. ONNX Runtime và model chạy offline trên CPU; không dùng OpenCV hoặc WebView cho nhận diện.
