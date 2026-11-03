@@ -19,6 +19,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -26,6 +27,8 @@ import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.Editable;
+import android.text.TextWatcher;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,6 +53,7 @@ public class MainActivity extends Activity {
     private Button btnNotifPerm;
     private Button btnCopyLog;
     private Spinner spSide;
+    private Spinner spBotMode;
     private Spinner spOrient;
     private Spinner spPieceTheme;
     private Spinner spTap;
@@ -57,6 +61,13 @@ public class MainActivity extends Activity {
     private Spinner spThreads;
     private Spinner spHash;
     private Button btnDownloadEngine;
+    private TextView tvStockfishHint;
+    private TextView tvAdvancedLocal;
+    private LinearLayout layoutCloudSettings;
+    private LinearLayout rowThreads;
+    private LinearLayout rowHash;
+    private EditText etCloudUrl;
+    private EditText etCloudApiKey;
     private SeekBar sbSkill;
     private SeekBar sbTime;
     private TextView tvSkill;
@@ -84,6 +95,7 @@ public class MainActivity extends Activity {
         btnNotifPerm = findViewById(R.id.btnNotifPerm);
         btnCopyLog = findViewById(R.id.btnCopyLog);
         spSide = findViewById(R.id.spSide);
+        spBotMode = findViewById(R.id.spBotMode);
         spOrient = findViewById(R.id.spOrient);
         spPieceTheme = findViewById(R.id.spPieceTheme);
         spTap = findViewById(R.id.spTap);
@@ -91,6 +103,13 @@ public class MainActivity extends Activity {
         spThreads = findViewById(R.id.spThreads);
         spHash = findViewById(R.id.spHash);
         btnDownloadEngine = findViewById(R.id.btnDownloadEngine);
+        tvStockfishHint = findViewById(R.id.tvStockfishHint);
+        tvAdvancedLocal = findViewById(R.id.tvAdvancedLocal);
+        layoutCloudSettings = findViewById(R.id.layoutCloudSettings);
+        rowThreads = findViewById(R.id.rowThreads);
+        rowHash = findViewById(R.id.rowHash);
+        etCloudUrl = findViewById(R.id.etCloudUrl);
+        etCloudApiKey = findViewById(R.id.etCloudApiKey);
         sbSkill = findViewById(R.id.sbSkill);
         sbTime = findViewById(R.id.sbTime);
         tvSkill = findViewById(R.id.tvSkill);
@@ -103,6 +122,8 @@ public class MainActivity extends Activity {
         setupSpinners();
         setupPieceThemeSpinner();
         setupSeekBars();
+        setupCloudSettings();
+        updateBotModeControls();
         setupButtons();
         setupEngineDownload();
         setupHelp();
@@ -178,6 +199,28 @@ public class MainActivity extends Activity {
             }
         });
 
+        String[] botModes = new String[]{
+                "Stockfish · trên điện thoại",
+                "Stockfish · máy chủ cloud",
+                "Maia-2 · máy chủ cloud"
+        };
+        ArrayAdapter<String> botAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, botModes);
+        botAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spBotMode.setAdapter(botAdapter);
+        spBotMode.setSelection(Prefs.getBotMode(this));
+        spBotMode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                Prefs.setBotMode(MainActivity.this, position);
+                updateBotModeControls();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+
         setupEngineSpinner(Prefs.getEngineId(this));
 
         int maxCores = Math.max(1, Math.min(16, Runtime.getRuntime().availableProcessors()));
@@ -231,6 +274,65 @@ public class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> parent) {
             }
         });
+    }
+
+    private void setupCloudSettings() {
+        etCloudUrl.setText(Prefs.getCloudUrl(this));
+        etCloudApiKey.setText(Prefs.getCloudApiKey(this));
+        etCloudUrl.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                Prefs.setCloudUrl(MainActivity.this, s.toString());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+        etCloudApiKey.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                Prefs.setCloudApiKey(MainActivity.this, s.toString());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+    }
+
+    private void updateBotModeControls() {
+        int mode = Prefs.getBotMode(this);
+        boolean localStockfish = mode == Prefs.BOT_STOCKFISH_LOCAL;
+        boolean maia = mode == Prefs.BOT_MAIA_CLOUD;
+        boolean hasStrength = localStockfish || maia;
+        spEngine.setVisibility(localStockfish ? View.VISIBLE : View.GONE);
+        btnDownloadEngine.setVisibility(localStockfish ? View.VISIBLE : View.GONE);
+        tvStockfishHint.setVisibility(localStockfish ? View.VISIBLE : View.GONE);
+        layoutCloudSettings.setVisibility(localStockfish ? View.GONE : View.VISIBLE);
+        tvAdvancedLocal.setVisibility(localStockfish ? View.VISIBLE : View.GONE);
+        rowThreads.setVisibility(localStockfish ? View.VISIBLE : View.GONE);
+        rowHash.setVisibility(localStockfish ? View.VISIBLE : View.GONE);
+        tvSkill.setVisibility(hasStrength ? View.VISIBLE : View.GONE);
+        sbSkill.setVisibility(hasStrength ? View.VISIBLE : View.GONE);
+        tvTime.setVisibility(maia ? View.GONE : View.VISIBLE);
+        btnMaxTime.setVisibility(maia ? View.GONE : View.VISIBLE);
+        sbTime.setVisibility(maia ? View.GONE : View.VISIBLE);
+
+        sbSkill.setMax(maia ? 9 : 20);
+        int progress = maia
+                ? (Prefs.getMaiaElo(this) - 1100) / 100
+                : Math.max(0, Math.min(20, Prefs.getSkill(this)));
+        sbSkill.setProgress(progress);
+        updateStrengthLabel(progress);
     }
 
     private void setupPieceThemeSpinner() {
@@ -446,14 +548,24 @@ public class MainActivity extends Activity {
     }
 
     private void setupSeekBars() {
-        int skill = Math.max(0, Math.min(20, Prefs.getSkill(this)));
-        sbSkill.setProgress(skill);
-        updateSkillLabel(skill);
+        boolean maia = Prefs.getBotMode(this) == Prefs.BOT_MAIA_CLOUD;
+        sbSkill.setMax(maia ? 9 : 20);
+        int strength = maia
+                ? (Prefs.getMaiaElo(this) - 1100) / 100
+                : Math.max(0, Math.min(20, Prefs.getSkill(this)));
+        sbSkill.setProgress(strength);
+        updateStrengthLabel(strength);
         sbSkill.setOnSeekBarChangeListener(new SimpleSeek() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                updateSkillLabel(progress);
-                Prefs.setSkill(MainActivity.this, progress);
+                if (Prefs.getBotMode(MainActivity.this) == Prefs.BOT_MAIA_CLOUD) {
+                    int elo = 1100 + progress * 100;
+                    Prefs.setMaiaElo(MainActivity.this, elo);
+                    tvSkill.setText("Elo Maia-2: " + elo + " (tối đa 2000)");
+                } else {
+                    updateStrengthLabel(progress);
+                    Prefs.setSkill(MainActivity.this, progress);
+                }
             }
         });
 
@@ -470,15 +582,21 @@ public class MainActivity extends Activity {
             }
         });
         btnMaxTime.setOnClickListener(v -> {
-            sbSkill.setProgress(20);
+            sbSkill.setProgress(Prefs.getBotMode(this) == Prefs.BOT_MAIA_CLOUD ? 9 : 20);
             sbTime.setProgress(98);
-            toast("Đã đặt sức mạnh tối đa: Skill 20 + 10000 ms");
+            toast(Prefs.getBotMode(this) == Prefs.BOT_MAIA_CLOUD
+                    ? "Đã đặt Elo Maia tối đa 2000"
+                    : "Đã đặt Stockfish tối đa: Skill 20 + 10000 ms");
         });
     }
 
-    private void updateSkillLabel(int v) {
-        tvSkill.setText("Độ mạnh: " + v + "/20"
-                + (v >= 20 ? " (tối đa, không giới hạn)" : ""));
+    private void updateStrengthLabel(int value) {
+        if (Prefs.getBotMode(this) == Prefs.BOT_MAIA_CLOUD) {
+            tvSkill.setText("Elo Maia-2: " + (1100 + value * 100) + " (tối đa 2000)");
+        } else {
+            tvSkill.setText("Độ mạnh Stockfish: " + value + "/20"
+                    + (value >= 20 ? " (giới hạn sức mạnh tắt)" : " (đã giới hạn)"));
+        }
     }
 
     private void updateTimeLabel(int ms) {
@@ -558,10 +676,13 @@ public class MainActivity extends Activity {
                 "4. Giữ nút nổi để mở menu → Căn chỉnh bàn cờ → kéo khung khớp mép bàn cờ → Lưu vùng.\n" +
                 "5. Để train: giữ nút nổi → Train bộ template, đặt tên, chọn Trắng dưới/trên rồi chụp một ảnh khai cuộc. " +
                 "Kiểm tra bàn cờ nhận diện, chạm ô sai để sửa và lưu.\n" +
-                "6. Chọn bộ template đã lưu ngay trong menu giữ nút nổi. Bấm ▶ → chọn Trắng/Đen để bắt đầu.\n" +
-                "7. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
+                "6. Chọn Stockfish trên máy hoặc Stockfish/Maia-2 cloud. Với cloud, nhập URL và API key của host Python.\n" +
+                "7. Chọn bộ template đã lưu ngay trong menu giữ nút nổi. Bấm ▶ → chọn Trắng/Đen để bắt đầu.\n" +
+                "8. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
                 "Lưu ý: occupancy không khớp khai cuộc chỉ hiện cảnh báo, không chặn chạy. Nếu nước đi không rõ, " +
-                "bot sẽ chờ thay vì đoán bừa. Nếu app hỏi phong cấp, hãy chọn Hậu. Nút nổi nên đặt ngoài vùng bàn cờ.");
+                "bot sẽ chờ thay vì đoán bừa. Maia-2 cloud dùng Elo 1100–2000; Maia chạy trên host, chưa chạy " +
+                "cục bộ Android. HTTP chỉ dùng IP LAN riêng; truy cập Internet phải dùng HTTPS. " +
+                "Nếu app hỏi phong cấp, hãy chọn Hậu. Nút nổi nên đặt ngoài vùng bàn cờ.");
     }
 
     private void requestPrepare() {

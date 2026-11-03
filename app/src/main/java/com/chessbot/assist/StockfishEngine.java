@@ -12,7 +12,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /** Minimal UCI wrapper around a bundled Stockfish executable. */
-public final class StockfishEngine {
+public final class StockfishEngine implements ChessEngine {
 
     private final String path;
     private Process process;

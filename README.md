@@ -130,12 +130,32 @@ Khi ván kết thúc (hết nước, chiếu bí, hoà), bot tự dừng và nú
 | **Hướng bàn cờ** | Tự động nhận diện hướng hoặc chọn cạnh/góc ô a1 thủ công (hỗ trợ xoay 90° và 180°). |
 | **Bộ template** | Giữ nút nổi để chọn template đã lưu hoặc chọn Train, chụp một ảnh khai cuộc rồi sửa kết quả. |
 | **Cách đi quân** | **Chạm 2 lần** (chạm ô nguồn, rồi ô đích) hoặc **Kéo** (kéo quân từ nguồn đến đích). Nếu app cờ vua không nhận một kiểu, đổi kiểu còn lại. |
-| **Stockfish** | Stockfish 16 có sẵn; dùng **Tải Stockfish tùy chỉnh** để lấy danh sách bản Android chính thức, tải thêm phiên bản rồi chọn bản đã tải. Cần mạng khi lấy danh sách/tải; chơi vẫn offline. |
-| **Độ mạnh** | Skill Level của Stockfish, 0–20. **20 = tắt giới hạn, chạy hết sức.** Nút **MAX** đặt luôn Skill 20 + 10000 ms. |
-| **Thời gian nghĩ** | 200–10000 ms mỗi nước, mặc định 5000 ms. Nút **MAX** đặt 10000 ms. |
-| **Nâng cao · CPU và RAM** | Chọn số nhân CPU và bộ nhớ Hash (128–4096 MB), hoặc để tự động theo thiết bị. Hash là RAM dành cho bảng tìm kiếm của engine. |
+| **Bot / Engine** | Stockfish trên điện thoại, Stockfish cloud, hoặc Maia-2 cloud. Cần chạy cùng bot đã chọn trên host. |
+| **Cloud** | Nhập base URL và API key của `cloud/app.py`. Dùng HTTPS qua Internet; HTTP chỉ được phép tới IP riêng trong mạng LAN. |
+| **Độ mạnh Stockfish** | Skill Level 0–20. Mức 20 gửi `UCI_LimitStrength=false`; vẫn bị giới hạn bởi thời gian nghĩ, CPU và RAM, không tương ứng một ELO cố định. |
+| **Elo Maia-2** | Thanh Elo 1100–2000 theo các mức mô hình Maia-2. Maia dự đoán nước đi, không chạy tìm kiếm theo thời gian như Stockfish. |
+| **Thời gian nghĩ** | 200–10000 ms mỗi nước, mặc định 5000 ms; áp dụng cho Stockfish. Nút **MAX** đặt Stockfish Skill 20 + 10000 ms. |
+| **Nâng cao · CPU và RAM** | Chọn số nhân CPU và bộ nhớ Hash (128–4096 MB), hoặc để tự động theo thiết bị; chỉ áp dụng cho Stockfish cục bộ. |
 
-Gợi ý: **Skill 20 / 5000 ms** là cấu hình mạnh, cân bằng. Muốn nhanh hơn giảm còn 1000–2000 ms; máy yếu hoặc nóng thì giảm tiếp. Muốn mạnh nhất thì bấm **MAX** (Skill 20 + 10000 ms) — mỗi nước sẽ lâu hơn.
+Gợi ý: **Skill 20 / 5000 ms** là cấu hình mạnh, cân bằng. Ở Skill 20, `UCI_LimitStrength` tắt thật sự; MAX không có nghĩa là thời gian vô hạn và Stockfish không có ELO cố định cho cấu hình này.
+
+## Host Maia-2 / Stockfish cloud
+
+Host cần Linux x86_64 để tự tải Stockfish 19; Maia-2 yêu cầu Python 3.10–3.12 và có thể cần nhiều RAM/dung lượng tải model. Maia-2 chạy trên host Python, chưa chạy trực tiếp trên Android.
+
+```bash
+cd cloud
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python app.py
+```
+
+Lần đầu chạy, menu hỏi chọn Stockfish 19 hoặc Maia-2, model Rapid/Blitz, Elo Maia hoặc thời gian/luồng/hash Stockfish. Khi binary Stockfish chưa có, Enter đồng ý tải binary Linux x86_64 chính thức và kiểm tra SHA-256. Maia-2 tự tải model chính thức khi khởi tạo lần đầu. Server lưu lựa chọn vào `cloud/config.json` và tạo API key; nhập URL host cùng key vào app.
+
+Đổi config bằng `python app.py --config maia.json`. Để đổi địa chỉ bind/cổng, dùng `--host 0.0.0.0 --port 8765`. HTTP không mã hóa chỉ dùng trong LAN; truy cập Internet phải bật TLS bằng `--cert cert.pem --key key.pem` hoặc đặt sau reverse proxy HTTPS. API tự chặn client public khi không có TLS.
+
+Máy chủ chỉ phục vụ engine đã chọn lúc khởi động, nên app phải chọn cùng loại bot. Maia-2 dùng Elo 1100–2000; thời gian nghĩ không áp dụng cho inference của Maia. API xác thực bằng Bearer API key, kiểm tra FEN và chỉ trả nước hợp lệ.
 
 ## 7. Cách hoạt động (tóm tắt kỹ thuật)
 
@@ -207,7 +227,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.22.apk
+# -> build/ChessBot-Assist-v1.5.23.apk
 ```
 
 Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + assets → `zipalign` → `apksigner`. Nhận diện template chạy offline bằng OpenCV 4.10.0 trên thiết bị.
@@ -247,6 +267,7 @@ chessbot/
 - **Mã nguồn** được phân phối theo GNU AGPL-3.0; xem `LICENSE`.
 - **Stockfish** — GPLv3, https://stockfishchess.org. APK kèm binary Stockfish 16 chính thức cho Android; các bản tùy chọn được tải trực tiếp từ GitHub `official-stockfish/Stockfish`.
 - **chesslib** của bhlangonijr — Apache License 2.0.
+- **Maia-2** — MIT, https://github.com/CSSLab/maia2. Model được tải riêng trên host theo hướng dẫn của project chính thức.
 - **OpenCV 4.10.0** — Apache License 2.0; thông báo giấy phép kèm trong `app/src/main/assets/opencv/LICENSE.txt`.
 - Biểu tượng và giao diện: tự vẽ, không dùng tài nguyên bên thứ ba.
 

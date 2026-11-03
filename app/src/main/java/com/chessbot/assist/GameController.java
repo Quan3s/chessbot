@@ -40,7 +40,7 @@ public final class GameController {
     private final ScreenCapture capture;
     private final Listener listener;
     private final Board board = new Board();
-    private final StockfishEngine engine;
+    private final ChessEngine engine;
     private final float[] rect;
     private final int screenW;
     private final int screenH;
@@ -70,7 +70,11 @@ public final class GameController {
         this.movetime = Prefs.getMovetime(ctx);
         this.skill = Prefs.getSkill(ctx);
         this.tapMode = Prefs.getTapMode(ctx);
-        this.engine = new StockfishEngine(StockfishCatalog.resolveEnginePath(ctx));
+        int botMode = Prefs.getBotMode(ctx);
+        this.engine = botMode == Prefs.BOT_STOCKFISH_LOCAL
+                ? new StockfishEngine(StockfishCatalog.resolveEnginePath(ctx))
+                : new CloudEngine(Prefs.getCloudUrl(ctx), Prefs.getCloudApiKey(ctx),
+                        botMode, Prefs.getMaiaElo(ctx));
         String themeId = Prefs.getPieceThemeId(ctx);
         byte[] selectedTemplates = PieceThemeStore.getTemplates(ctx, themeId);
         templateModel = OpenCvChessRecognizer.Model.fromBytes(selectedTemplates);
@@ -106,20 +110,25 @@ public final class GameController {
 
     private void loop() {
         try {
-            EventLog.add("Khởi động Stockfish…");
+            EventLog.add("Khởi động " + engine.getName() + "…");
             engine.start();
-            int cores = Runtime.getRuntime().availableProcessors();
-            int maxThreads = Math.max(1, Math.min(16, cores));
-            int configuredThreads = Prefs.getThreads(ctx);
-            int threads = configuredThreads > 0
-                    ? Math.min(configuredThreads, maxThreads) : maxThreads;
-            int configuredHashMb = Prefs.getHashMb(ctx);
-            int hashMb = configuredHashMb > 0 ? configuredHashMb : chooseHashMb();
-            engine.configure(skill, threads, hashMb);
-            EventLog.add("Engine: " + engine.getName() + " · " + threads + "/" + cores
-                    + " nhân · " + hashMb + " MB hash · Skill " + skill
-                    + " · " + movetime + " ms/nước"
-                    + (skill >= 20 ? " (tối đa, không giới hạn)" : ""));
+            if (engine instanceof StockfishEngine) {
+                int cores = Runtime.getRuntime().availableProcessors();
+                int maxThreads = Math.max(1, Math.min(16, cores));
+                int configuredThreads = Prefs.getThreads(ctx);
+                int threads = configuredThreads > 0
+                        ? Math.min(configuredThreads, maxThreads) : maxThreads;
+                int configuredHashMb = Prefs.getHashMb(ctx);
+                int hashMb = configuredHashMb > 0 ? configuredHashMb : chooseHashMb();
+                engine.configure(skill, threads, hashMb);
+                EventLog.add("Engine: " + engine.getName() + " · " + threads + "/" + cores
+                        + " nhân · " + hashMb + " MB hash · Skill " + skill
+                        + " · " + movetime + " ms/nước"
+                        + (skill >= 20 ? " (UCI_LimitStrength tắt)" : " (giới hạn bật)"));
+            } else {
+                engine.configure(skill, 1, 128);
+                EventLog.add("Engine: " + engine.getName() + " · " + movetime + " ms/nước");
+            }
 
             String initError = initialize();
             if (initError != null) {

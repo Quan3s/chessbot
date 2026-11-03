@@ -215,10 +215,15 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Stockfish"
+                android:text="BOT / ENGINE"
                 android:textColor="@color/text"
                 android:textSize="14sp"
                 android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spBotMode"
+                android:layout_width="match_parent"
+                android:layout_height="44dp" />
 
             <Spinner
                 android:id="@+id/spEngine"
@@ -236,12 +241,56 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/tvStockfishHint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Bản 16 có sẵn; tải thêm phiên bản chính thức cần kết nối mạng."
                 android:textColor="@color/text_dim"
                 android:textSize="12sp" />
+
+            <LinearLayout
+                android:id="@+id/layoutCloudSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="URL máy chủ (HTTPS; HTTP chỉ dùng IP LAN)"
+                    android:textColor="@color/text_dim"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/etCloudUrl"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="https://ten-mien-cua-ban"
+                    android:inputType="textUri"
+                    android:singleLine="true"
+                    android:textColor="@color/text"
+                    android:textColorHint="@color/text_dim" />
+
+                <EditText
+                    android:id="@+id/etCloudApiKey"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:hint="API key của máy chủ"
+                    android:inputType="textPassword"
+                    android:singleLine="true"
+                    android:textColor="@color/text"
+                    android:textColorHint="@color/text_dim" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Maia-2 chạy trên máy chủ Python (Elo 1100–2000); thời gian chỉ áp dụng cho Stockfish. HTTP chỉ chấp nhận IP LAN."
+                    android:textColor="@color/text_dim"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -379,6 +428,7 @@
                 android:max="98" />
 
             <TextView
+                android:id="@+id/tvAdvancedLocal"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -388,6 +438,7 @@
                 android:textStyle="bold" />
 
             <LinearLayout
+                android:id="@+id/rowThreads"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
@@ -409,6 +460,7 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/rowHash"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"

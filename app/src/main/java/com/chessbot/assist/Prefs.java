@@ -17,6 +17,10 @@ public final class Prefs {
     public static final int TAP_TAP = 0;
     public static final int TAP_DRAG = 1;
 
+    public static final int BOT_STOCKFISH_LOCAL = 0;
+    public static final int BOT_STOCKFISH_CLOUD = 1;
+    public static final int BOT_MAIA_CLOUD = 2;
+
     private Prefs() {
     }
 
@@ -103,6 +107,42 @@ public final class Prefs {
 
     public static void setEngineId(Context c, String v) {
         get(c).edit().putString("engine_id", v).apply();
+    }
+
+    public static int getBotMode(Context c) {
+        return Math.max(BOT_STOCKFISH_LOCAL,
+                Math.min(BOT_MAIA_CLOUD, get(c).getInt("bot_mode", BOT_STOCKFISH_LOCAL)));
+    }
+
+    public static void setBotMode(Context c, int mode) {
+        get(c).edit().putInt("bot_mode",
+                Math.max(BOT_STOCKFISH_LOCAL, Math.min(BOT_MAIA_CLOUD, mode))).apply();
+    }
+
+    public static String getCloudUrl(Context c) {
+        return get(c).getString("cloud_url", "");
+    }
+
+    public static void setCloudUrl(Context c, String url) {
+        get(c).edit().putString("cloud_url", url.trim()).apply();
+    }
+
+    public static String getCloudApiKey(Context c) {
+        return get(c).getString("cloud_api_key", "");
+    }
+
+    public static void setCloudApiKey(Context c, String apiKey) {
+        get(c).edit().putString("cloud_api_key", apiKey.trim()).apply();
+    }
+
+    public static int getMaiaElo(Context c) {
+        return Math.max(1100, Math.min(2000, get(c).getInt("maia_elo", 2000)));
+    }
+
+    public static void setMaiaElo(Context c, int elo) {
+        int bounded = Math.max(1100, Math.min(2000, elo));
+        int snapped = 1100 + Math.round((bounded - 1100) / 100f) * 100;
+        get(c).edit().putInt("maia_elo", snapped).apply();
     }
 
     /** Zero means choose the device's available CPU cores automatically. */
