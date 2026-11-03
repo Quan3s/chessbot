@@ -71,7 +71,7 @@ public final class CloudEngine implements ChessEngine {
             throw new IOException("Không tạo được yêu cầu tới server", e);
         }
         JSONObject response = request("POST", "/bestmove", body.toString(),
-                Math.min(120000, Math.max(15000, movetimeMs + 30000)));
+                Math.min(30000, Math.max(12000, movetimeMs + 10000)));
         if (!engineType.equals(response.optString("engine", ""))) {
             throw new IOException("Server trả lời bằng engine không đúng lựa chọn.");
         }
@@ -97,47 +97,70 @@ public final class CloudEngine implements ChessEngine {
         }
         String address = base.getScheme() + "://" + base.getRawAuthority()
                 + basePath + path;
-        HttpURLConnection connection = (HttpURLConnection) new URL(address).openConnection();
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(7000);
-        connection.setReadTimeout(timeoutMs);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "ChessBotAssist");
-        if (!apiKey.isEmpty()) {
-            connection.setRequestProperty("Authorization", "Bearer " + apiKey);
-        }
-        if (body != null) {
-            byte[] data = body.getBytes(StandardCharsets.UTF_8);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            connection.setFixedLengthStreamingMode(data.length);
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(data);
-            }
-        }
-        try {
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 300
-                    ? connection.getInputStream() : connection.getErrorStream();
-            String text = stream == null ? "" : readLimited(stream);
-            if (status < 200 || status >= 300) {
-                String detail;
-                try {
-                    detail = new JSONObject(text).optString("error", "");
-                } catch (org.json.JSONException ignored) {
-                    detail = "";
-                }
-                throw new IOException("Server phản hồi HTTP " + status
-                        + (detail.isEmpty() ? "" : ": " + detail));
-            }
+        for (int attempt = 0; attempt < 2; attempt++) {
+            HttpURLConnection connection =
+                    (HttpURLConnection) new URL(address).openConnection();
+            boolean retry = false;
             try {
-                return new JSONObject(text);
-            } catch (org.json.JSONException e) {
-                throw new IOException("Phản hồi server không phải JSON hợp lệ.", e);
+                connection.setRequestMethod(method);
+                connection.setConnectTimeout(7000);
+                connection.setReadTimeout(timeoutMs);
+                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("User-Agent", "ChessBotAssist");
+                if (!apiKey.isEmpty()) {
+                    connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+                }
+                if (body != null) {
+                    byte[] data = body.getBytes(StandardCharsets.UTF_8);
+                    connection.setDoOutput(true);
+                    connection.setRequestProperty(
+                            "Content-Type", "application/json; charset=utf-8");
+                    connection.setFixedLengthStreamingMode(data.length);
+                    try (OutputStream output = connection.getOutputStream()) {
+                        output.write(data);
+                    }
+                }
+                int status = connection.getResponseCode();
+                InputStream stream = status >= 200 && status < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                String text = stream == null ? "" : readLimited(stream);
+                if (status < 200 || status >= 300) {
+                    if (attempt == 0 && isTransientStatus(status)) {
+                        retry = true;
+                    } else {
+                        String detail;
+                        try {
+                            detail = new JSONObject(text).optString("error", "");
+                        } catch (org.json.JSONException ignored) {
+                            detail = "";
+                        }
+                        throw new IOException("Server phản hồi HTTP " + status
+                                + (detail.isEmpty() ? "" : ": " + detail));
+                    }
+                } else {
+                    try {
+                        return new JSONObject(text);
+                    } catch (org.json.JSONException e) {
+                        throw new IOException("Phản hồi server không phải JSON hợp lệ.", e);
+                    }
+                }
+            } finally {
+                connection.disconnect();
             }
-        } finally {
-            connection.disconnect();
+            if (retry) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Đã dừng khi thử kết nối lại server.", e);
+                }
+            }
         }
+        throw new IOException("Server tạm thời không phản hồi.");
+    }
+
+    private static boolean isTransientStatus(int status) {
+        return status == 502 || status == 503 || status == 504;
     }
 
     private static URI parseBaseUrl(String text) throws IOException {

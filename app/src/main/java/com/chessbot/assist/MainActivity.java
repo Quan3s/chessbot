@@ -679,8 +679,8 @@ public class MainActivity extends Activity {
                 "6. Chọn Stockfish trên máy hoặc Stockfish/Maia-2 cloud. Với cloud, nhập URL và API key của host Python.\n" +
                 "7. Chọn bộ template đã lưu ngay trong menu giữ nút nổi. Bấm ▶ → chọn Trắng/Đen để bắt đầu.\n" +
                 "8. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
-                "Lưu ý: occupancy không khớp khai cuộc chỉ hiện cảnh báo, không chặn chạy. Nếu nước đi không rõ, " +
-                "bot sẽ chờ thay vì đoán bừa. Maia-2 cloud dùng Elo 1100–2000; Maia chạy trên host, chưa chạy " +
+                "Lưu ý: nếu BoardReader không xác nhận được bàn cờ khai cuộc, bot sẽ dừng để tránh đi sai; " +
+                "hãy căn chỉnh lại hoặc train/chọn bộ template. Maia-2 cloud dùng Elo 1100–2000; Maia chạy trên host, chưa chạy " +
                 "cục bộ Android. HTTP chỉ dùng IP LAN riêng; truy cập Internet phải dùng HTTPS. " +
                 "Nếu app hỏi phong cấp, hãy chọn Hậu. Nút nổi nên đặt ngoài vùng bàn cờ.");
     }

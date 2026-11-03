@@ -35,6 +35,7 @@ public final class GameController {
 
     private static final String START_FEN =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    private static final long BOARD_SYNC_TIMEOUT_MS = 15000;
 
     private final Context ctx;
     private final ScreenCapture capture;
@@ -146,6 +147,7 @@ public final class GameController {
             long lastChange = 0;
             int stable = 0;
             int unknown = 0;
+            long unknownSince = 0;
             Move previousObservedMove = null;
             int observedMoveRepeats = 0;
             long observedMoveSince = 0;
@@ -187,9 +189,19 @@ public final class GameController {
                     baseline = res;
                     previousObservedMove = null;
                     observedMoveRepeats = 0;
+                    unknownSince = 0;
                 }
 
                 if (!synced) {
+                    if (unknownSince == 0) {
+                        unknownSince = SystemClock.elapsedRealtime();
+                    }
+                    if (SystemClock.elapsedRealtime() - unknownSince
+                            >= BOARD_SYNC_TIMEOUT_MS) {
+                        finish("Không đồng bộ được bàn cờ sau 15 giây. Kiểm tra vùng "
+                                + "căn chỉnh và bộ template, rồi thử lại.", true);
+                        return;
+                    }
                     if (tapPending && SystemClock.elapsedRealtime() - tapAt < 650) {
                         sleep(110);
                         continue;
@@ -221,10 +233,6 @@ public final class GameController {
                                 if (unknown == 1) {
                                     EventLog.add("Bàn cờ đã đổi — đang xác nhận nước đi…");
                                 }
-                                if (unknown > 45) {
-                                    finish("Không nhận ra nước đi. Hãy kiểm tra vùng bàn cờ / mở ván mới.", true);
-                                    return;
-                                }
                                 sleep(230);
                                 continue;
                             }
@@ -235,10 +243,6 @@ public final class GameController {
                             if (unknown == 1) {
                                 EventLog.add("Bàn cờ đã đổi nhưng chưa khớp nước hợp lệ — đang chờ…");
                                 EventLog.add("Bàn cờ đọc được:\n" + res.debugRows());
-                            }
-                            if (unknown > 45) {
-                                finish("Không nhận ra nước đi. Hãy kiểm tra vùng bàn cờ / mở ván mới.", true);
-                                return;
                             }
                             sleep(230);
                             continue;
@@ -263,6 +267,7 @@ public final class GameController {
                     tapPending = false;
                     pending = null;
                     unknown = 0;
+                    unknownSince = 0;
                     previousObservedMove = null;
                     observedMoveRepeats = 0;
                     retried = 0;
@@ -312,7 +317,10 @@ public final class GameController {
                     return;
                 }
 
+                long searchStarted = SystemClock.elapsedRealtime();
                 String best = engine.bestMove(board.getFen(), movetime);
+                EventLog.add("Engine trả lời sau "
+                        + (SystemClock.elapsedRealtime() - searchStarted) + " ms");
                 if (best == null) {
                     finish("Stockfish không có nước đi.", false);
                     return;
@@ -426,8 +434,9 @@ public final class GameController {
                 + " ô trống nhận nhầm thành có quân, " + startRead.missedPieces
                 + " quân bị bỏ sót; đúng " + (64 - mismatch) + "/64 ô");
         if (!startRead.isValid()) {
-            EventLog.add("Cảnh báo: occupancy BoardReader không khớp khai cuộc; "
-                    + "tiếp tục với vị trí mặc định.");
+            return "Không xác nhận được bàn cờ khai cuộc ("
+                    + (64 - mismatch) + "/64 ô đúng). Bot chưa chạy để tránh đi sai. "
+                    + "Căn chỉnh lại vùng bàn cờ, mở ván mới hoặc train/chọn bộ template.";
         }
 
         a1Position = orient == Prefs.ORIENT_AUTO

@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="$ROOT/build"
 WORK="$OUT/.build"
 LIB="$ROOT/libs/chesslib-1.3.3.jar:$ROOT/libs/opencv-4.10.0.jar"
-NAME="ChessBot-Assist-v1.5.23"
+NAME="ChessBot-Assist-v1.5.24"
 
 mkdir -p "$OUT"
 rm -rf "$WORK"
@@ -27,8 +27,8 @@ echo "[1/6] resources"
     --java "$WORK/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 29 \
-    --version-name "1.5.23" \
+    --version-code 30 \
+    --version-name "1.5.24" \
     --auto-add-overlay \
     "$WORK/res.zip"
 

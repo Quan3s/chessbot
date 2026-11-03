@@ -186,7 +186,7 @@ MediaProjection (0.5×) ──> vùng bàn đã crop thủ công
 
 ## 8. Giới hạn đã biết
 
-- **Vị trí ban đầu lấy từ FEN đã lưu khi train.** Để tạo template mới, ảnh dùng train phải là thế khai cuộc chuẩn; lúc chạy bot, occupancy khác khai cuộc chỉ hiện cảnh báo.
+- **Vị trí ban đầu lấy từ FEN đã lưu khi train.** Để tạo template mới, ảnh train phải là thế khai cuộc chuẩn. Nếu BoardReader không xác nhận được thế khai cuộc, bot dừng thay vì đi theo FEN mặc định; hãy kiểm tra vùng bàn cờ hoặc chọn template đã train.
 - **Hai nước khác nhau có thể cho cùng một hình ảnh** (ví dụ mã ăn một trong hai tốt giống hệt nhau). Khi đó ảnh chụp không đủ phân biệt; app **dừng/báo không nhận ra** chứ không chọn bừa. Đây là giới hạn của cách đọc lưới ô, không phải bot tự đoán.
 - **Phong cấp**: bot đi tốt đến hàng cuối; nếu app hiện bảng chọn quân, **bạn phải chọn Hậu**. Bot chờ tối đa 15 giây. Chọn quân khác Hậu sẽ làm bàn cờ nội bộ lệch và bot có thể dừng.
 - **Không thấy bàn cờ nếu bị che**: nút nổi, bong bóng chat, cửa sổ khác, hiệu ứng mờ, hoặc app dùng `FLAG_SECURE` (màn hình đen khi chụp). App tự dời nút nổi sau hiệu chỉnh, nhưng hãy kiểm tra lại.
@@ -227,7 +227,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.23.apk
+# -> build/ChessBot-Assist-v1.5.24.apk
 ```
 
 Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + assets → `zipalign` → `apksigner`. Nhận diện template chạy offline bằng OpenCV 4.10.0 trên thiết bị.
