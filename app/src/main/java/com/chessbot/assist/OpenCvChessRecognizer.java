@@ -358,6 +358,32 @@ public final class OpenCvChessRecognizer {
         return result;
     }
 
+    public static int[] recognizeOccupancy(int[] pixels, int width, int height, float[] crop,
+                                           int orientation, Model model) {
+        if (model == null) {
+            throw new IllegalArgumentException("No OpenCV template model selected");
+        }
+        loadNative();
+        Mat board = makeBoard(pixels, width, height, crop);
+        byte[] gray = new byte[BOARD_SIZE * BOARD_SIZE];
+        try {
+            board.get(0, 0, gray);
+        } finally {
+            board.release();
+        }
+        int[] occupancy = new int[64];
+        for (int rank = 0; rank < 8; rank++) {
+            for (int file = 0; file < 8; file++) {
+                int row = BoardOrientation.screenRowForSquare(rank, file, orientation);
+                int col = BoardOrientation.screenColumnForSquare(rank, file, orientation);
+                double deviation = cellDeviation(gray, col * CELL_SIZE, row * CELL_SIZE);
+                occupancy[rank * 8 + file] =
+                        deviation > model.occupancyThreshold ? 1 : 0;
+            }
+        }
+        return occupancy;
+    }
+
     private static Mat makeBoard(int[] pixels, int width, int height, float[] crop) {
         if (pixels == null || width <= 0 || height <= 0 || pixels.length < width * height
                 || crop == null || crop.length < 4) {
@@ -370,29 +396,73 @@ public final class OpenCvChessRecognizer {
         if (right - left < 8 || bottom - top < 8) {
             throw new IllegalArgumentException("Board crop is too small");
         }
-        byte[] grayPixels = new byte[width * height];
-        for (int i = 0; i < grayPixels.length; i++) {
-            int pixel = pixels[i];
-            int r = (pixel >> 16) & 255;
-            int g = (pixel >> 8) & 255;
-            int b = pixel & 255;
-            grayPixels[i] = (byte) ((77 * r + 150 * g + 29 * b) >> 8);
+        int cropWidth = right - left;
+        int cropHeight = bottom - top;
+        byte[] grayPixels = new byte[cropWidth * cropHeight];
+        for (int y = 0; y < cropHeight; y++) {
+            int source = (top + y) * width + left;
+            int target = y * cropWidth;
+            for (int x = 0; x < cropWidth; x++) {
+                int pixel = pixels[source + x];
+                int r = (pixel >> 16) & 255;
+                int g = (pixel >> 8) & 255;
+                int b = pixel & 255;
+                grayPixels[target + x] = (byte) ((77 * r + 150 * g + 29 * b) >> 8);
+            }
         }
-        Mat gray = new Mat(height, width, CvType.CV_8UC1);
+        Mat gray = new Mat(cropHeight, cropWidth, CvType.CV_8UC1);
         Mat board = new Mat();
         try {
             gray.put(0, 0, grayPixels);
-            Mat selected = gray.submat(new Rect(left, top, right - left, bottom - top));
-            try {
-                Imgproc.resize(selected, board, new Size(BOARD_SIZE, BOARD_SIZE),
-                        0, 0, Imgproc.INTER_AREA);
-            } finally {
-                selected.release();
-            }
+            Imgproc.resize(gray, board, new Size(BOARD_SIZE, BOARD_SIZE),
+                    0, 0, Imgproc.INTER_AREA);
         } finally {
             gray.release();
         }
         return board;
+    }
+
+    private static double cellDeviation(byte[] board, int left, int top) {
+        int margin = 4;
+        double background = 0d;
+        int backgroundCount = 0;
+        for (int y = 0; y < CELL_SIZE; y++) {
+            for (int x = 0; x < CELL_SIZE; x++) {
+                if (x >= margin && x < CELL_SIZE - margin
+                        && y >= margin && y < CELL_SIZE - margin) {
+                    continue;
+                }
+                background += board[(top + y) * BOARD_SIZE + left + x] & 255;
+                backgroundCount++;
+            }
+        }
+        background /= Math.max(1, backgroundCount);
+
+        double sum = 0d;
+        for (int y = margin; y < CELL_SIZE - margin; y++) {
+            for (int x = margin; x < CELL_SIZE - margin; x++) {
+                int value = board[(top + y) * BOARD_SIZE + left + x] & 255;
+                int difference = (int) Math.round(Math.abs(value - background));
+                if (difference < 7) {
+                    difference = 0;
+                }
+                sum += difference;
+            }
+        }
+        double mean = sum / (SAMPLE_SIZE * SAMPLE_SIZE);
+        double variance = 0d;
+        for (int y = margin; y < CELL_SIZE - margin; y++) {
+            for (int x = margin; x < CELL_SIZE - margin; x++) {
+                int value = board[(top + y) * BOARD_SIZE + left + x] & 255;
+                int difference = (int) Math.round(Math.abs(value - background));
+                if (difference < 7) {
+                    difference = 0;
+                }
+                double delta = difference - mean;
+                variance += delta * delta;
+            }
+        }
+        return Math.sqrt(variance / (SAMPLE_SIZE * SAMPLE_SIZE));
     }
 
     private static CellFeatures extract(Mat cell) {

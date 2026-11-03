@@ -166,11 +166,11 @@ public final class GameController {
                         rect[0], rect[1], rect[2], rect[3],
                         Prefs.getBoardDevThreshold(ctx), Prefs.getBoardFillThreshold(ctx));
                 int[] readerGrid = res.boardOccupancy(a1Position);
-                OpenCvChessRecognizer.Result typedRead = typedReady
-                        ? OpenCvChessRecognizer.recognize(frame.pixels, frame.width,
-                                frame.height, rect, a1Position, templateModel)
-                        : null;
-                int[] grid = typedRead == null ? readerGrid : occupancyFrom(typedRead);
+                int[] grid = typedReady
+                        ? OpenCvChessRecognizer.recognizeOccupancy(
+                                frame.pixels, frame.width, frame.height,
+                                rect, a1Position, templateModel)
+                        : readerGrid;
                 if (lastGrid != null && Arrays.equals(grid, lastGrid)) {
                     stable++;
                 } else {
@@ -247,10 +247,18 @@ public final class GameController {
                             sleep(230);
                             continue;
                         }
-                        if (typedReady && typedRead != null) {
+                        if (typedReady) {
                             // Piece types are extra evidence, never a
                             // replacement for the occupancy match. They are
                             // accepted only when unique and clearly better.
+                            long recognitionStarted = SystemClock.elapsedRealtime();
+                            OpenCvChessRecognizer.Result typedRead =
+                                    OpenCvChessRecognizer.recognize(
+                                            frame.pixels, frame.width, frame.height,
+                                            rect, a1Position, templateModel);
+                            EventLog.add("OpenCV phân loại quân mất "
+                                    + (SystemClock.elapsedRealtime() - recognitionStarted)
+                                    + " ms");
                             Move typedMove = chooseTypedMove(grid, typedRead);
                             if (typedMove != null && !typedMove.equals(move)) {
                                 EventLog.add("Nhận diện quân xác nhận: " + uci(typedMove)
