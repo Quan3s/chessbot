@@ -216,6 +216,10 @@ public final class GameController {
                     } else {
                         Move occupancyMove = findMoveWithThresholdFallback(
                                 frame, grid, res, baseline);
+                        if (occupancyMove == null && typedReady) {
+                            occupancyMove = chooseTypedMoveFromChanges(
+                                    frame, grid, res, baseline);
+                        }
                         if (occupancyMove != null) {
                             if (occupancyMove.equals(previousObservedMove)) {
                                 observedMoveRepeats++;
@@ -246,28 +250,6 @@ public final class GameController {
                             }
                             sleep(230);
                             continue;
-                        }
-                        if (typedReady) {
-                            // Piece types are extra evidence, never a
-                            // replacement for the occupancy match. They are
-                            // accepted only when unique and clearly better.
-                            long recognitionStarted = SystemClock.elapsedRealtime();
-                            OpenCvChessRecognizer.Result typedRead =
-                                    OpenCvChessRecognizer.recognize(
-                                            frame.pixels, frame.width, frame.height,
-                                            rect, a1Position, templateModel);
-                            EventLog.add("OpenCV phân loại quân mất "
-                                    + (SystemClock.elapsedRealtime() - recognitionStarted)
-                                    + " ms");
-                            Move typedMove = chooseTypedMove(grid, typedRead);
-                            if (typedMove != null && !typedMove.equals(move)) {
-                                EventLog.add("Nhận diện quân xác nhận: " + uci(typedMove)
-                                        + " · tin cậy "
-                                        + Math.round(OpenCvChessRecognizer.Result
-                                                .averageConfidence(typedRead) * 100)
-                                        + "%");
-                                move = typedMove;
-                            }
                         }
                     }
                     Side mover = board.getSideToMove();
@@ -406,18 +388,6 @@ public final class GameController {
         if (typedReady) {
             a1Position = PieceThemeStore.getOrientation(ctx, Prefs.getPieceThemeId(ctx));
             botSide = Prefs.isBotWhite(ctx) ? Side.WHITE : Side.BLACK;
-            OpenCvChessRecognizer.Result recognized = OpenCvChessRecognizer.recognize(
-                    frame.pixels, frame.width, frame.height, rect, a1Position, templateModel);
-            int occupancyMatches = startingOccupancyMatches(occupancyFrom(recognized));
-            EventLog.add("OpenCV nhận diện bàn cờ: occupancy khai cuộc "
-                    + occupancyMatches + "/64 · " + recognized.unknown
-                    + " ô chưa rõ · " + BoardOrientation.label(a1Position));
-            EventLog.add("Bàn cờ nhận diện:\n" + recognized.describe());
-            EventLog.add("FEN nhận diện: " + recognized.toFen(true));
-            if (occupancyMatches != 64) {
-                EventLog.add("Cảnh báo: occupancy khác khai cuộc; tiếp tục dùng bàn cờ "
-                        + "đã nhận diện hoặc FEN đã sửa trong bộ template.");
-            }
             try {
                 board.clear();
                 board.loadFromFen(savedStartFen);
@@ -426,11 +396,18 @@ public final class GameController {
                 board.clear();
                 board.loadFromFen(START_FEN);
             }
-            EventLog.add("FEN bắt đầu đã hiệu chỉnh: " + board.getFen());
-            if (!startRead.isValid()) {
-                EventLog.add("Cảnh báo: BoardReader không xác nhận được occupancy khai cuộc; "
-                        + "OpenCV tiếp tục.");
+            int[] detected = OpenCvChessRecognizer.recognizeOccupancy(
+                    frame.pixels, frame.width, frame.height, rect, a1Position, templateModel);
+            int[] expected = boardOccupancy(board);
+            int occupancyMatches = matchingSquares(expected, detected);
+            EventLog.add("OpenCV xác nhận occupancy thế cờ đã lưu: "
+                    + occupancyMatches + "/64 · " + BoardOrientation.label(a1Position));
+            if (occupancyMatches != 64) {
+                return "Bàn cờ trên màn hình không khớp thế đã train ("
+                        + occupancyMatches + "/64 ô). Mở đúng thế khai cuộc, kiểm tra crop "
+                        + "và hướng bàn cờ rồi thử lại.";
             }
+            EventLog.add("FEN bắt đầu đã hiệu chỉnh: " + board.getFen());
             return null;
         }
 
@@ -458,27 +435,17 @@ public final class GameController {
         return null;
     }
 
-    private int startingOccupancyMatches(int[] occupancy) {
-        if (occupancy == null || occupancy.length != 64) {
-            return 0;
+    private static int matchingSquares(int[] expected, int[] observed) {
+        if (expected.length != 64 || observed.length != 64) {
+            return -1;
         }
         int matches = 0;
         for (int square = 0; square < 64; square++) {
-            boolean expected = square / 8 < 2 || square / 8 >= 6;
-            if ((occupancy[square] != 0) == expected) {
+            if ((expected[square] != 0) == (observed[square] != 0)) {
                 matches++;
             }
         }
         return matches;
-    }
-
-    private int[] occupancyFrom(OpenCvChessRecognizer.Result recognized) {
-        int[] occupancy = new int[64];
-        for (int square = 0; square < occupancy.length; square++) {
-            occupancy[square] = recognized.type[square] == OpenCvChessRecognizer.TYPE_EMPTY
-                    ? 0 : 1;
-        }
-        return occupancy;
     }
 
     private String selectedThemeName(Context context) {
@@ -554,6 +521,22 @@ public final class GameController {
     }
 
     private Move findMove(int[] observed, BoardReader.Result now, BoardReader.Result before) {
+        List<Move> bestMoves = bestMoves(observed, now, before);
+        if (bestMoves.size() == 1) {
+            return bestMoves.get(0);
+        }
+        // Promotion: all four choices produce the same picture. Prefer a queen.
+        for (Move move : bestMoves) {
+            Piece piece = move.getPromotion();
+            if (piece == Piece.WHITE_QUEEN || piece == Piece.BLACK_QUEEN) {
+                return move;
+            }
+        }
+        return null;
+    }
+
+    private List<Move> bestMoves(int[] observed, BoardReader.Result now,
+                                 BoardReader.Result before) {
         List<Move> legal = board.legalMoves();
         int best = Integer.MAX_VALUE;
         List<Move> bestMoves = new ArrayList<>();
@@ -576,20 +559,10 @@ public final class GameController {
                 bestMoves.add(m);
             }
         }
-        if (best > 3 || bestMoves.isEmpty()) {
-            return null;
+        if (best > 3) {
+            bestMoves.clear();
         }
-        if (bestMoves.size() == 1) {
-            return bestMoves.get(0);
-        }
-        // Promotion: all four choices produce the same picture. Prefer a queen.
-        for (Move m : bestMoves) {
-            Piece p = m.getPromotion();
-            if (p == Piece.WHITE_QUEEN || p == Piece.BLACK_QUEEN) {
-                return m;
-            }
-        }
-        return null;
+        return bestMoves;
     }
 
     private Move findMoveWithThresholdFallback(ScreenCapture.Frame frame, int[] observed,
@@ -638,35 +611,37 @@ public final class GameController {
         return votes >= 2 ? consensus : null;
     }
 
-    /**
-     * Use a complete, confident piece classification to distinguish legal
-     * moves that have the same occupancy image (including underpromotion).
-     * Any uncertain square leaves the existing occupancy-only path in charge.
-     */
-    private Move chooseTypedMove(int[] observed, OpenCvChessRecognizer.Result rec) {
-        if (rec == null || rec.occupied == 0
-                || rec.knownTypes != rec.occupied
-                || rec.knownColors != rec.occupied) {
+    private Move chooseTypedMoveFromChanges(ScreenCapture.Frame frame, int[] observed,
+                                            BoardReader.Result now,
+                                            BoardReader.Result before) {
+        List<Move> candidates = bestMoves(observed, now, before);
+        if (candidates.size() < 2) {
             return null;
         }
 
+        boolean[] changedSquares = new boolean[64];
+        for (Move move : candidates) {
+            changedSquares[move.getFrom().ordinal()] = true;
+            changedSquares[move.getTo().ordinal()] = true;
+            addCastleSquares(move, changedSquares);
+        }
+        OpenCvChessRecognizer.Result recognized = OpenCvChessRecognizer.recognizeSelected(
+                frame.pixels, frame.width, frame.height, rect, a1Position,
+                templateModel, changedSquares);
+
         List<Move> matches = new ArrayList<>();
-        for (Move move : board.legalMoves()) {
+        for (Move move : candidates) {
             Board candidate = board.clone();
             candidate.doMove(move);
-            if (!Arrays.equals(observed, boardOccupancy(candidate))) {
-                continue;
-            }
-
             boolean matchesPieces = true;
-            for (Square square : Square.values()) {
-                if (square == Square.NONE) {
+            for (int index = 0; index < changedSquares.length; index++) {
+                if (!changedSquares[index]) {
                     continue;
                 }
-                int index = square.ordinal();
+                Square square = Square.values()[index];
                 Piece piece = candidate.getPiece(square);
                 if (piece == null || piece == Piece.NONE) {
-                    if (rec.type[index] != OpenCvChessRecognizer.TYPE_EMPTY) {
+                    if (observed[index] != 0) {
                         matchesPieces = false;
                         break;
                     }
@@ -674,7 +649,8 @@ public final class GameController {
                     int type = piece.ordinal() % 6;
                     int color = piece.ordinal() < 6
                             ? BoardReader.WHITE : BoardReader.BLACK;
-                    if (rec.type[index] != type || rec.color[index] != color) {
+                    if (recognized.type[index] != type
+                            || recognized.color[index] != color) {
                         matchesPieces = false;
                         break;
                     }
@@ -685,6 +661,25 @@ public final class GameController {
             }
         }
         return matches.size() == 1 ? matches.get(0) : null;
+    }
+
+    private static void addCastleSquares(Move move, boolean[] squares) {
+        Square from = move.getFrom();
+        Square to = move.getTo();
+        if (from == Square.E1 && to == Square.G1) {
+            markSquares(squares, Square.H1, Square.F1);
+        } else if (from == Square.E1 && to == Square.C1) {
+            markSquares(squares, Square.A1, Square.D1);
+        } else if (from == Square.E8 && to == Square.G8) {
+            markSquares(squares, Square.H8, Square.F8);
+        } else if (from == Square.E8 && to == Square.C8) {
+            markSquares(squares, Square.A8, Square.D8);
+        }
+    }
+
+    private static void markSquares(boolean[] squares, Square first, Square second) {
+        squares[first.ordinal()] = true;
+        squares[second.ordinal()] = true;
     }
 
     /**

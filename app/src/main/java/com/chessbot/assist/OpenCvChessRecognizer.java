@@ -276,8 +276,16 @@ public final class OpenCvChessRecognizer {
 
     public static Result recognize(int[] pixels, int width, int height, float[] crop,
                                    int orientation, Model model) {
+        return recognizeSelected(pixels, width, height, crop, orientation, model, null);
+    }
+
+    public static Result recognizeSelected(int[] pixels, int width, int height, float[] crop,
+                                           int orientation, Model model, boolean[] selected) {
         if (model == null) {
             throw new IllegalArgumentException("No OpenCV template model selected");
+        }
+        if (selected != null && selected.length != 64) {
+            throw new IllegalArgumentException("Expected 64 selected-square flags");
         }
         loadNative();
         Mat board = makeBoard(pixels, width, height, crop);
@@ -287,13 +295,16 @@ public final class OpenCvChessRecognizer {
         try {
             for (int rank = 0; rank < 8; rank++) {
                 for (int file = 0; file < 8; file++) {
+                    int square = rank * 8 + file;
+                    if (selected != null && !selected[square]) {
+                        continue;
+                    }
                     int row = BoardOrientation.screenRowForSquare(rank, file, orientation);
                     int col = BoardOrientation.screenColumnForSquare(rank, file, orientation);
                     Mat cell = board.submat(new Rect(col * CELL_SIZE, row * CELL_SIZE,
                             CELL_SIZE, CELL_SIZE));
                     try {
                         CellFeatures features = extract(cell);
-                        int square = rank * 8 + file;
                         result.deviation[square] = (float) features.deviation;
                         if (features.deviation <= model.occupancyThreshold) {
                             features.mat.release();

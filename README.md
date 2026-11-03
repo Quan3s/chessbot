@@ -164,24 +164,25 @@ MediaProjection (0.5×) ──> vùng bàn đã crop thủ công
                                       │
                          resize 320×320 → chia 8×8 ô
 │
-                        OpenCV template matching
+                    OpenCV đọc occupancy 64 ô
                                       │
-                    xác nhận bằng nước hợp lệ của chesslib
+               chỉ phân loại ô liên quan khi nước bị mơ hồ
                                       │
-                              cập nhật bàn cờ
+                đối chiếu luật cờ, cập nhật bàn cờ trong RAM
                                       │
                     Stockfish ──> AccessibilityService
 ```
 
-- **Template OpenCV.** Một ảnh khai cuộc đã crop thủ công được resize cố định về 320×320. App học ngưỡng occupancy từ độ lệch chuẩn của các ô trống, trừ màu nền ô rồi so khớp ảnh xám cho 12 loại quân; các bộ template được lưu cục bộ.
+- **Template OpenCV.** Một ảnh khai cuộc đã crop thủ công được resize cố định về 320×320. App học ngưỡng occupancy từ độ lệch chuẩn của các ô trống; lúc bắt đầu chỉ kiểm tra occupancy với FEN đã lưu, không cần phân loại lại toàn bộ 32 quân.
 - **Sửa nhận diện.** Sau khi chụp, người dùng xem bàn cờ 8×8 và sửa quân sai trước khi lưu FEN/hướng. Khi quét, occupancy sai khai cuộc chỉ ghi cảnh báo; bot vẫn dùng nước đi hợp lệ để đồng bộ.
-- **Xác nhận bằng luật cờ.** Với mỗi ảnh bàn cờ đổi, app thử nước hợp lệ và chỉ dùng kết quả nhận diện quân khi toàn bộ bàn cờ khớp chính xác một nước đi. Nếu có ô nào không chắc, app quay về so lưới ô có quân/trống như trước; nếu cách đó cũng không xác định duy nhất nước đi, app chờ/báo lỗi chứ không đoán.
+- **Giữ trạng thái bàn cờ.** Chesslib giữ loại và màu của cả 64 ô trong RAM. Mỗi ảnh mới chỉ cần so occupancy để tìm nước hợp lệ; các quân ở ô không đổi được giữ nguyên, không chạy template matching lại cho chúng.
+- **Template matching có mục tiêu.** Nếu nhiều nước hợp lệ cho cùng occupancy, app chỉ so template ở các ô nguồn/đích (và ô xe khi nhập thành) của các nước ứng viên. Nếu ảnh không đủ phân biệt, app chờ/báo lỗi thay vì đoán.
 - **Bộ template tùy chỉnh.** Giữ nút nổi để train từ một ảnh khai cuộc; đặt tên, chọn hướng, xem/sửa bàn cờ nhận diện rồi lưu. Có thể lưu nhiều bộ và chọn bộ đang dùng ngay trong menu giữ nút nổi.
 - **Xác nhận bằng luật cờ.** Nhận diện quân và occupancy chỉ được dùng khi bàn cờ khớp một nước hợp lệ; nếu không rõ, bot chờ thay vì đoán.
 - **Phân biệt nước ăn quân** bằng độ sáng / độ đặc của quân tại ô nguồn (trước) và ô đích (sau), vì nhiều nước ăn quân khác nhau có thể cho cùng một lưới ô trống / có quân.
 - **Nút nổi** là `TYPE_APPLICATION_OVERLAY`, kéo được, lưu vị trí; giữ 0,5 giây để mở hiệu chỉnh.
 - **Stockfish** mặc định là binary tĩnh đóng gói trong `jniLibs`; bản tùy chọn được tải vào vùng riêng của app và kiểm tra UCI trước khi chọn. Engine chạy qua UCI (`uci`, `setoption`, `position fen`, `go movetime`), không cần root. Skill 20 tắt `UCI_LimitStrength`; mặc định dùng tối đa 16 luồng và hash tự chọn theo RAM thực (128–1024 MB), có thể chỉnh trong mục Nâng cao.
-- **Nếu quân không rõ.** Ô chưa phân loại được không được tự đoán thành quân đã biết; so khớp nước đi hợp lệ vẫn là lớp bảo vệ và app chờ nếu không xác định được nước đi.
+- **Nếu quân không rõ.** Ô chưa phân loại được không được tự đoán thành quân đã biết; trạng thái quân ở các ô khác vẫn được giữ nguyên, và app chờ nếu không xác định được nước đi.
 - **Ảnh chụp** ở nửa độ phân giải để nhẹ CPU; toạ độ chạm quy đổi từ tỉ lệ khung hiệu chỉnh × kích thước màn hình thật.
 
 ## 8. Giới hạn đã biết
@@ -227,7 +228,7 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.25.apk
+# -> build/ChessBot-Assist-v1.5.26.apk
 ```
 
 Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + assets → `zipalign` → `apksigner`. Nhận diện template chạy offline bằng OpenCV 4.10.0 trên thiết bị.
