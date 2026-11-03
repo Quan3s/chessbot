@@ -385,7 +385,9 @@ def make_handler(
                     return False
             provided = self.headers.get("Authorization", "")
             expected = "Bearer " + api_key
-            if hmac.compare_digest(provided, expected):
+            if hmac.compare_digest(
+                provided.encode("utf-8"), expected.encode("utf-8")
+            ):
                 return True
             self._send_json(401, {"error": "API key không đúng."})
             return False

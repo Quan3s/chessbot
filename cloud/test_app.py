@@ -57,6 +57,8 @@ class HostTests(unittest.TestCase):
     def test_health_requires_api_key(self):
         status, _ = self.call("GET", "/health", key="wrong")
         self.assertEqual(status, 401)
+        status, _ = self.call("GET", "/health", key="wrong-é")
+        self.assertEqual(status, 401)
         status, payload = self.call("GET", "/health")
         self.assertEqual(status, 200)
         self.assertEqual(payload["engine"], "stockfish")
