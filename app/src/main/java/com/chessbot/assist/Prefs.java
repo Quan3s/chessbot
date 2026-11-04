@@ -163,29 +163,6 @@ public final class Prefs {
         get(c).edit().putInt("engine_hash_mb", Math.max(0, v)).apply();
     }
 
-    public static String getPieceThemeId(Context c) {
-        return PieceThemeStore.getSelectedId(c);
-    }
-
-    public static void setPieceThemeId(Context c, String id) {
-        PieceThemeStore.setSelectedId(c, id);
-    }
-
-    public static int getBoardDevThreshold(Context c) {
-        return get(c).getInt("board_dev_threshold", 26);
-    }
-
-    public static float getBoardFillThreshold(Context c) {
-        return get(c).getFloat("board_fill_threshold", 0.10f);
-    }
-
-    public static void setBoardThresholds(Context c, int dev, float fill) {
-        get(c).edit()
-                .putInt("board_dev_threshold", dev)
-                .putFloat("board_fill_threshold", fill)
-                .apply();
-    }
-
     public static boolean hasCalibration(Context c) {
         return get(c).getBoolean("has_cal", false);
     }

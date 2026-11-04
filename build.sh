@@ -11,8 +11,8 @@ PLATFORM="$SDK/platforms/android-35/android.jar"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="$ROOT/build"
 WORK="$OUT/.build"
-LIB="$ROOT/libs/chesslib-1.3.3.jar:$ROOT/libs/opencv-4.10.0.jar"
-NAME="ChessBot-Assist-v1.5.26"
+LIB="$ROOT/libs/chesslib-1.3.3.jar"
+NAME="ChessBot-Assist-v1.5.27"
 
 mkdir -p "$OUT"
 rm -rf "$WORK"
@@ -27,8 +27,8 @@ echo "[1/6] resources"
     --java "$WORK/gen" \
     --min-sdk-version 26 \
     --target-sdk-version 28 \
-    --version-code 32 \
-    --version-name "1.5.26" \
+    --version-code 33 \
+    --version-name "1.5.27" \
     --auto-add-overlay \
     "$WORK/res.zip"
 
@@ -42,14 +42,13 @@ javac -source 11 -target 11 -Xlint:-options -encoding UTF-8 \
 echo "[3/6] dex"
 jar cf "$WORK/classes.jar" -C "$WORK/classes" .
 "$BT/d8" --lib "$PLATFORM" --min-api 26 --output "$WORK/dex" \
-    "$WORK/classes.jar" "$ROOT/libs/chesslib-1.3.3.jar" "$ROOT/libs/opencv-4.10.0.jar"
+    "$WORK/classes.jar" "$ROOT/libs/chesslib-1.3.3.jar"
 
 echo "[4/6] package"
 cp "$WORK/base.apk" "$WORK/unaligned.apk"
 cp "$ROOT/app/src/main/jniLibs/arm64-v8a/libstockfish.so" "$WORK/lib/arm64-v8a/"
 cp "$ROOT/app/src/main/jniLibs/armeabi-v7a/libstockfish.so" "$WORK/lib/armeabi-v7a/"
 for abi in arm64-v8a armeabi-v7a; do
-    cp "$ROOT/app/src/main/jniLibs/$abi/libopencv_java4.so" "$WORK/lib/$abi/"
     cp "$ROOT/app/src/main/jniLibs/$abi/libc++_shared.so" "$WORK/lib/$abi/"
 done
 python3 - "$WORK" "$ROOT/app/src/main/assets" <<'PY'
@@ -62,7 +61,7 @@ apk = os.path.join(out, "unaligned.apk")
 with zipfile.ZipFile(apk, "a", zipfile.ZIP_DEFLATED) as z:
     z.write(os.path.join(out, "dex", "classes.dex"), "classes.dex")
     for abi in ("arm64-v8a", "armeabi-v7a"):
-        for name in ("libstockfish.so", "libopencv_java4.so", "libc++_shared.so"):
+        for name in ("libstockfish.so", "libc++_shared.so"):
             path = os.path.join(out, "lib", abi, name)
             if os.path.isfile(path):
                 z.write(path, "lib/%s/%s" % (abi, name))

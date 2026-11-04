@@ -8,7 +8,7 @@ Bot cờ vua chạy **Stockfish ngay trên điện thoại**, mặc định Stoc
 - **Lưu ý tương thích:** targetSdk 28 là cần thiết để Android 10+ cho phép chạy engine tải vào vùng riêng của app; Android có thể cảnh báo ứng dụng cũ và bản build này không phù hợp phát hành qua Google Play.
 - **Không đọc nội dung app khác qua Trợ năng**: quyền Trợ năng chỉ dùng để gửi thao tác chạm / kéo; bàn cờ được đọc từ ảnh chụp màn hình do bạn cấp quyền
 
-APK sau khi build: `build/ChessBot-Assist-v1.5.22.apk`.
+APK sau khi build: `build/ChessBot-Assist-v1.5.27.apk`.
 
 **Bản 1.5.7:** quay về ngưỡng nhận diện gốc của v1.5.2 làm lựa chọn đầu tiên, đồng thời thử thêm các ngưỡng tương phản rộng hơn khi cần. Nhật ký nay ghi rõ số ô trống bị nhận nhầm, số quân bị bỏ sót và thông báo lỗi cũng nêu đúng hai loại sai lệch này.
 
@@ -42,11 +42,13 @@ APK sau khi build: `build/ChessBot-Assist-v1.5.22.apk`.
 
 **Bản 1.5.22:** chuyển sang OpenCV template matching từ một ảnh khai cuộc đã crop thủ công. Bàn cờ được resize 320×320; ngưỡng occupancy học từ độ lệch chuẩn các ô trống. Người dùng chọn hướng, sửa bàn cờ/FEN nhận diện trước khi lưu nhiều bộ template có tên. Sai khác occupancy chỉ cảnh báo.
 
+**Bản 1.5.27:** khôi phục nhận diện thuần Java từ v1.5.2. BoardReader dùng lại ngưỡng gốc cố định; nhận diện loại quân tự học từ 32 quân ở thế khai cuộc, không cần OpenCV, train thủ công hay bộ template lưu sẵn. Giữ các tính năng engine, cloud và bốn hướng bàn cờ của bản mới.
+
 ---
 
 ## 1. Cài đặt
 
-1. Chép file `ChessBot-Assist-v1.5.22.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
+1. Chép file `ChessBot-Assist-v1.5.27.apk` sang điện thoại (hoặc tải trực tiếp trên máy).
 2. Mở file APK. Nếu Android hỏi, bật **“Cài đặt ứng dụng không rõ nguồn gốc”** cho trình duyệt / trình quản lý file.
 3. Play Protect có thể cảnh báo vì APK ký bằng khóa phát triển và không phát hành qua Google Play. Chọn **“Vẫn cài đặt”**.
 4. Mở **ChessBot Assist**.
@@ -73,7 +75,7 @@ Sau đó bấm **BẬT NÚT NỔI** → hộp thoại quay màn hình của Andr
 
 1. Mở app cờ vua bạn muốn dùng (Chess.com, Lichess, Cờ Vua Online, app nội bộ…).
 2. Tạo **ván mới từ thế cờ ban đầu**. App chỉ bám được ván bắt đầu từ thế cờ chuẩn; ván đang chơi dở hoặc thế cờ tùy chỉnh sẽ bị từ chối.
-3. Trong ChessBot, chọn **Hướng bàn cờ**: Tự động hoặc góc của ô a1. Chọn **Bộ quân / theme** đã train để bot nhận đúng bộ quân.
+3. Trong ChessBot, chọn **Hướng bàn cờ**: Tự động hoặc góc của ô a1. Nhận diện quân được học tự động khi bắt đầu ở thế cờ chuẩn.
 4. Đặt nút nổi ở chỗ không che bàn cờ. Sau khi hiệu chỉnh, app tự dời nút ra ngoài vùng bàn cờ nếu thấy chồng lên.
 
 Bạn **không cần chọn màu ở đây**: màu quân được hỏi ngay sau khi hiệu chỉnh, và hỏi lại mỗi lần bấm ▶. Mục **Màu quân của bạn (mặc định)** chỉ là gợi ý cho hai chỗ đó.
@@ -90,7 +92,7 @@ Trong khung hiệu chỉnh:
 1. Kéo **4 góc** (chấm tròn trắng) sao cho khung xanh **khớp đúng mép ngoài của bàn cờ 8×8**, không tính phần viền ghi toạ độ, thanh trạng thái hay danh sách nước đi.
 2. Có thể kéo giữa khung để di chuyển, hoặc kéo ra vùng trống để tạo khung mới.
 3. Bấm **Lưu vùng**.
-4. Bấm **Chỉ lưu vùng** để đóng khung. Giữ nút nổi → **Train bộ template**, đặt tên, chọn Trắng dưới/trên rồi chụp ảnh khai cuộc; sửa bàn cờ nhận diện và lưu.
+4. Bấm **Chỉ lưu vùng** để đóng khung. Không cần train hay lưu template riêng.
 
 App sẽ tự chụp lại và báo trong Nhật ký, ví dụ:
 
@@ -99,9 +101,9 @@ Kiểm tra hiệu chỉnh: Nhầm 0 ô trống thành có quân, bỏ sót 0 qu�
 ```
 
 - **64/64**: occupancy khớp bàn cờ khai cuộc.
-- **Ít quân / lệch nhiều ô**: khung chưa khớp, hoặc ván chưa ở thế cờ ban đầu, hoặc nút nổi đang che bàn cờ. Đây chỉ là cảnh báo; nếu đã train template, bot vẫn có thể chạy.
+- **Ít quân / lệch nhiều ô**: khung chưa khớp, ván chưa ở thế cờ ban đầu, hoặc nút nổi đang che bàn cờ. Bot sẽ không bắt đầu nếu sai lệch quá lớn.
 
-Nếu kiểm tra chưa đạt, hãy kiểm tra lại crop/hướng bàn cờ và template đã chọn. Bot vẫn chạy với màu bạn chọn; bấm **⏸** nếu muốn dừng.
+Nếu kiểm tra chưa đạt, hãy kiểm tra lại crop/hướng bàn cờ rồi thử lại.
 
 ## 5. Chạy bot
 
@@ -128,7 +130,6 @@ Khi ván kết thúc (hết nước, chiếu bí, hoà), bot tự dừng và nú
 |---|---|
 | **Màu quân của bạn (mặc định)** | Trắng / Đen. Đây là lựa chọn gợi ý; sau khi hiệu chỉnh và mỗi lần bấm ▶ app vẫn hỏi lại cho chắc. |
 | **Hướng bàn cờ** | Tự động nhận diện hướng hoặc chọn cạnh/góc ô a1 thủ công (hỗ trợ xoay 90° và 180°). |
-| **Bộ template** | Giữ nút nổi để chọn template đã lưu hoặc chọn Train, chụp một ảnh khai cuộc rồi sửa kết quả. |
 | **Cách đi quân** | **Chạm 2 lần** (chạm ô nguồn, rồi ô đích) hoặc **Kéo** (kéo quân từ nguồn đến đích). Nếu app cờ vua không nhận một kiểu, đổi kiểu còn lại. |
 | **Bot / Engine** | Stockfish trên điện thoại, Stockfish cloud, hoặc Maia-2 cloud. Cần chạy cùng bot đã chọn trên host. |
 | **Cloud** | Nhập base URL và API key của `cloud/app.py`. Dùng HTTPS qua Internet; HTTP chỉ được phép tới IP riêng trong mạng LAN. |
@@ -162,22 +163,19 @@ Máy chủ chỉ phục vụ engine đã chọn lúc khởi động, nên app ph
 ```
 MediaProjection (0.5×) ──> vùng bàn đã crop thủ công
                                       │
-                         resize 320×320 → chia 8×8 ô
-│
-                    OpenCV đọc occupancy 64 ô
+                 BoardReader đọc occupancy 64 ô
                                       │
-               chỉ phân loại ô liên quan khi nước bị mơ hồ
+            quân được học tự động từ thế khai cuộc
                                       │
                 đối chiếu luật cờ, cập nhật bàn cờ trong RAM
                                       │
                     Stockfish ──> AccessibilityService
 ```
 
-- **Template OpenCV.** Một ảnh khai cuộc đã crop thủ công được resize cố định về 320×320. App học ngưỡng occupancy từ độ lệch chuẩn của các ô trống; lúc bắt đầu chỉ kiểm tra occupancy với FEN đã lưu, không cần phân loại lại toàn bộ 32 quân.
-- **Sửa nhận diện.** Sau khi chụp, người dùng xem bàn cờ 8×8 và sửa quân sai trước khi lưu FEN/hướng. Khi quét, occupancy sai khai cuộc chỉ ghi cảnh báo; bot vẫn dùng nước đi hợp lệ để đồng bộ.
-- **Giữ trạng thái bàn cờ.** Chesslib giữ loại và màu của cả 64 ô trong RAM. Mỗi ảnh mới chỉ cần so occupancy để tìm nước hợp lệ; các quân ở ô không đổi được giữ nguyên, không chạy template matching lại cho chúng.
-- **Template matching có mục tiêu.** Nếu nhiều nước hợp lệ cho cùng occupancy, app chỉ so template ở các ô nguồn/đích (và ô xe khi nhập thành) của các nước ứng viên. Nếu ảnh không đủ phân biệt, app chờ/báo lỗi thay vì đoán.
-- **Bộ template tùy chỉnh.** Giữ nút nổi để train từ một ảnh khai cuộc; đặt tên, chọn hướng, xem/sửa bàn cờ nhận diện rồi lưu. Có thể lưu nhiều bộ và chọn bộ đang dùng ngay trong menu giữ nút nổi.
+- **Nhận diện gốc v1.5.2.** BoardReader đọc từng ô bằng ngưỡng tương phản cố định gốc (26, 10%); không dùng ngưỡng đã tự điều chỉnh/lưu từ lần đọc trước.
+- **Tự học loại quân.** Khi bàn cờ khớp chính xác thế khai cuộc, PieceRecognizer học hình 12 loại quân từ 32 quân đã biết và tự kiểm tra. Không cần OpenCV, mẫu tải sẵn hay thao tác train của người dùng.
+- **Giữ trạng thái bàn cờ.** Chesslib giữ vị trí và luật đi trong RAM. Mỗi ảnh mới được đối chiếu với các nước hợp lệ; nhận diện loại quân chỉ dùng làm bằng chứng bổ sung khi occupancy mơ hồ.
+- **Xác nhận bằng luật cờ.** Bot chỉ chấp nhận nước đi hợp lệ và chờ/báo lỗi nếu ảnh không đủ rõ, thay vì tự đoán.
 - **Xác nhận bằng luật cờ.** Nhận diện quân và occupancy chỉ được dùng khi bàn cờ khớp một nước hợp lệ; nếu không rõ, bot chờ thay vì đoán.
 - **Phân biệt nước ăn quân** bằng độ sáng / độ đặc của quân tại ô nguồn (trước) và ô đích (sau), vì nhiều nước ăn quân khác nhau có thể cho cùng một lưới ô trống / có quân.
 - **Nút nổi** là `TYPE_APPLICATION_OVERLAY`, kéo được, lưu vị trí; giữ 0,5 giây để mở hiệu chỉnh.
@@ -187,7 +185,7 @@ MediaProjection (0.5×) ──> vùng bàn đã crop thủ công
 
 ## 8. Giới hạn đã biết
 
-- **Vị trí ban đầu lấy từ FEN đã lưu khi train.** Để tạo template mới, ảnh train phải là thế khai cuộc chuẩn. Nếu BoardReader không xác nhận được thế khai cuộc, bot dừng thay vì đi theo FEN mặc định; hãy kiểm tra vùng bàn cờ hoặc chọn template đã train.
+- **Vị trí ban đầu** phải là thế khai cuộc chuẩn. Nếu BoardReader không xác nhận được occupancy, bot dừng thay vì đi theo FEN mặc định; hãy kiểm tra vùng bàn cờ và hướng.
 - **Hai nước khác nhau có thể cho cùng một hình ảnh** (ví dụ mã ăn một trong hai tốt giống hệt nhau). Khi đó ảnh chụp không đủ phân biệt; app **dừng/báo không nhận ra** chứ không chọn bừa. Đây là giới hạn của cách đọc lưới ô, không phải bot tự đoán.
 - **Phong cấp**: bot đi tốt đến hàng cuối; nếu app hiện bảng chọn quân, **bạn phải chọn Hậu**. Bot chờ tối đa 15 giây. Chọn quân khác Hậu sẽ làm bàn cờ nội bộ lệch và bot có thể dừng.
 - **Không thấy bàn cờ nếu bị che**: nút nổi, bong bóng chat, cửa sổ khác, hiệu ứng mờ, hoặc app dùng `FLAG_SECURE` (màn hình đen khi chụp). App tự dời nút nổi sau hiệu chỉnh, nhưng hãy kiểm tra lại.
@@ -205,7 +203,7 @@ MediaProjection (0.5×) ──> vùng bàn đã crop thủ công
 |---|---|
 | Nút nổi không hiện | Kiểm tra quyền “Nút nổi trên app khác”; bấm BẬT NÚT NỔI lại; tắt tối ưu pin cho ChessBot. |
 | “Hãy bật Trợ năng cho ChessBot” | Vào Cài đặt → Trợ năng → ChessBot Assist → bật; sau đó mở lại app. |
-| “Bàn cờ chưa ở vị trí bắt đầu” | Kiểm tra crop/hướng và chọn đúng template; occupancy chỉ là cảnh báo, không chặn khởi chạy. |
+| “Không xác nhận được bàn cờ khai cuộc” | Mở ván mới, căn chỉnh sát viền bàn cờ và chọn đúng hướng trong cài đặt. |
 | “Không nhận ra nước đi” | Khung lệch, nút nổi che bàn cờ, hoặc app đang hiện mũi tên / hiệu ứng lớn. Chỉnh lại khung, dời nút, tắt gợi ý nước đi trong app cờ vua. |
 | “Không đi được quân” | Đổi **Cách đi quân** giữa Chạm 2 lần và Kéo; kiểm tra Trợ năng còn bật. |
 | Bot đi quân đối thủ | Chọn sai màu ở menu **Bạn cầm quân nào?**. Dừng bot, bấm ▶ lại và chọn đúng màu của bạn. |
@@ -228,10 +226,10 @@ cd chessbot
 # Lưu và giữ an toàn keystore/password dùng để ký các bản cập nhật.
 # Không đưa keystore hoặc file mật khẩu vào Git.
 ./build.sh
-# -> build/ChessBot-Assist-v1.5.26.apk
+# -> build/ChessBot-Assist-v1.5.27.apk
 ```
 
-Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + assets → `zipalign` → `apksigner`. Nhận diện template chạy offline bằng OpenCV 4.10.0 trên thiết bị.
+Script chạy tuần tự: `aapt2 compile` → `aapt2 link` → `javac` → `d8` → đóng gói `.so` + `classes.dex` + assets → `zipalign` → `apksigner`. Nhận diện bàn cờ và quân chạy offline bằng Java thuần trên thiết bị.
 
 APK cần ký bằng keystore riêng. Trong bản build phát hành này, `keystore.jks` và mật khẩu nằm cục bộ trong `.release-signing.env` (được `.gitignore` loại khỏi Git); hãy sao lưu **cả hai** ở nơi an toàn. Mất keystore sẽ khiến các bản cập nhật sau không thể cài đè APK này. Có thể đặt `CHESSBOT_KEYSTORE`, `CHESSBOT_KEY_ALIAS`, `CHESSBOT_STORE_PASS` và `CHESSBOT_KEY_PASS` để dùng keystore khác.
 
@@ -248,7 +246,7 @@ chessbot/
     │   ├── MainActivity.java            # UI, quyền, cài đặt, nhật ký
     │   ├── BotService.java              # foreground service, nút nổi, hiệu chỉnh
     │   ├── GameController.java          # vòng lặp bot, so khớp nước đi
-    │   ├── OpenCvChessRecognizer.java   # occupancy và template matching OpenCV
+    │   ├── PieceRecognizer.java         # học / nhận diện loại quân tự động
     │   ├── BoardReader.java             # đọc lưới ô có quân / trống
     │   ├── ScreenCapture.java           # MediaProjection 0.5×
     │   ├── StockfishEngine.java         # UCI wrapper
@@ -269,7 +267,6 @@ chessbot/
 - **Stockfish** — GPLv3, https://stockfishchess.org. APK kèm binary Stockfish 16 chính thức cho Android; các bản tùy chọn được tải trực tiếp từ GitHub `official-stockfish/Stockfish`.
 - **chesslib** của bhlangonijr — Apache License 2.0.
 - **Maia-2** — MIT, https://github.com/CSSLab/maia2. Model được tải riêng trên host theo hướng dẫn của project chính thức.
-- **OpenCV 4.10.0** — Apache License 2.0; thông báo giấy phép kèm trong `app/src/main/assets/opencv/LICENSE.txt`.
 - Biểu tượng và giao diện: tự vẽ, không dùng tài nguyên bên thứ ba.
 
 Công cụ này dành cho **học tập, thử nghiệm và chơi với bot / bạn bè**. Không dùng trong ván xếp hạng có người thật, giải đấu, hoặc bất kỳ đâu mà gian lận bị cấm — hãy tôn trọng điều khoản của app cờ vua và đối thủ. Nếu bạn phát hành lại APK, cần tuân thủ GPLv3 của Stockfish (kèm mã nguồn tương ứng).

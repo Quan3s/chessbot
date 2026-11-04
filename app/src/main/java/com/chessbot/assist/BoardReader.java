@@ -22,10 +22,6 @@ public final class BoardReader {
     public static int DEV_THRESHOLD = 26;
     /** Fraction of the inner square that must differ to call it occupied. */
     public static float FILL_THRESHOLD = 0.10f;
-    private static final int[] START_DEV_THRESHOLDS = {26, 26, 36, 42, 56, 56, 68, 72, 82};
-    private static final float[] START_FILL_THRESHOLDS = {
-            0.10f, 0.20f, 0.14f, 0.10f, 0.10f, 0.20f, 0.14f, 0.24f, 0.30f
-    };
     /** Ring used to sample the square background (fractions of the square). */
     private static final float RING_IN = 0.06f;
     private static final float RING_OUT = 0.16f;
@@ -188,32 +184,6 @@ public final class BoardReader {
         }
     }
 
-    /** Best read of the standard starting position across conservative thresholds. */
-    public static final class StartRead {
-        public final Result result;
-        public final int devThreshold;
-        public final float fillThreshold;
-        public final int occupied;
-        public final int mismatch;
-        public final int falsePositives;
-        public final int missedPieces;
-
-        private StartRead(Result result, int devThreshold, float fillThreshold,
-                          int occupied, int mismatch, int falsePositives, int missedPieces) {
-            this.result = result;
-            this.devThreshold = devThreshold;
-            this.fillThreshold = fillThreshold;
-            this.occupied = occupied;
-            this.mismatch = mismatch;
-            this.falsePositives = falsePositives;
-            this.missedPieces = missedPieces;
-        }
-
-        public boolean isValid() {
-            return occupied >= 28 && mismatch <= 4;
-        }
-    }
-
     /**
      * @param px     ARGB pixels
      * @param w      frame width
@@ -222,75 +192,6 @@ public final class BoardReader {
      */
     public static Result read(int[] px, int w, int h,
                               float l, float t, float r, float b) {
-        return read(px, w, h, l, t, r, b, DEV_THRESHOLD, FILL_THRESHOLD);
-    }
-
-    /**
-     * Read a starting board using several contrast settings. Starting-position
-     * occupancy is known, so it provides a safe signal for adapting to piece
-     * themes and low-resolution captures without guessing at arbitrary boards.
-     */
-    public static StartRead readStartingPosition(int[] px, int w, int h,
-                                                 float l, float t, float r, float b) {
-        StartRead best = null;
-        for (int i = 0; i < START_DEV_THRESHOLDS.length; i++) {
-            Result result = read(px, w, h, l, t, r, b,
-                    START_DEV_THRESHOLDS[i], START_FILL_THRESHOLDS[i]);
-            int occupied = 0;
-            int mismatch = Integer.MAX_VALUE;
-            int falsePositives = 0;
-            int missedPieces = 0;
-            for (int row = 0; row < 8; row++) {
-                for (int col = 0; col < 8; col++) {
-                    boolean detected = result.cells[row * 8 + col].occupied;
-                    if (detected) {
-                        occupied++;
-                    }
-                }
-            }
-            for (int orientation : new int[]{
-                    BoardOrientation.A1_BOTTOM_LEFT, BoardOrientation.A1_TOP_RIGHT,
-                    BoardOrientation.A1_BOTTOM_RIGHT, BoardOrientation.A1_TOP_LEFT}) {
-                int currentMismatch = 0;
-                int currentFalsePositives = 0;
-                int currentMissedPieces = 0;
-                for (int row = 0; row < 8; row++) {
-                    for (int col = 0; col < 8; col++) {
-                        boolean expected = orientation == BoardOrientation.A1_BOTTOM_LEFT
-                                || orientation == BoardOrientation.A1_TOP_RIGHT
-                                ? row < 2 || row >= 6 : col < 2 || col >= 6;
-                        boolean detected = result.cells[row * 8 + col].occupied;
-                        if (detected && !expected) {
-                            currentFalsePositives++;
-                        } else if (!detected && expected) {
-                            currentMissedPieces++;
-                        }
-                        if (detected != expected) {
-                            currentMismatch++;
-                        }
-                    }
-                }
-                if (currentMismatch < mismatch) {
-                    mismatch = currentMismatch;
-                    falsePositives = currentFalsePositives;
-                    missedPieces = currentMissedPieces;
-                }
-            }
-            if (best == null || mismatch < best.mismatch) {
-                best = new StartRead(result, START_DEV_THRESHOLDS[i],
-                        START_FILL_THRESHOLDS[i], occupied, mismatch,
-                        falsePositives, missedPieces);
-            }
-            if (mismatch == 0) {
-                break;
-            }
-        }
-        return best;
-    }
-
-    public static Result read(int[] px, int w, int h,
-                              float l, float t, float r, float b,
-                              int devThreshold, float fillThreshold) {
         Result res = new Result();
         int left = clamp(Math.round(l * w), 0, w - 1);
         int top = clamp(Math.round(t * h), 0, h - 1);
@@ -314,7 +215,7 @@ public final class BoardReader {
                 int y0 = top + Math.round(row * ch);
                 int y1 = top + Math.round((row + 1) * ch);
                 readCell(px, w, h, x0, y0, x1, y1, hist, lumHist,
-                        res.cells[row * 8 + col], devThreshold, fillThreshold);
+                        res.cells[row * 8 + col], DEV_THRESHOLD, FILL_THRESHOLD);
             }
         }
         return res;

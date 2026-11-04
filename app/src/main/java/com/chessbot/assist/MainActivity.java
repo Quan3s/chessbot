@@ -55,7 +55,6 @@ public class MainActivity extends Activity {
     private Spinner spSide;
     private Spinner spBotMode;
     private Spinner spOrient;
-    private Spinner spPieceTheme;
     private Spinner spTap;
     private Spinner spEngine;
     private Spinner spThreads;
@@ -97,7 +96,6 @@ public class MainActivity extends Activity {
         spSide = findViewById(R.id.spSide);
         spBotMode = findViewById(R.id.spBotMode);
         spOrient = findViewById(R.id.spOrient);
-        spPieceTheme = findViewById(R.id.spPieceTheme);
         spTap = findViewById(R.id.spTap);
         spEngine = findViewById(R.id.spEngine);
         spThreads = findViewById(R.id.spThreads);
@@ -120,7 +118,6 @@ public class MainActivity extends Activity {
         tvHelp = findViewById(R.id.tvHelp);
 
         setupSpinners();
-        setupPieceThemeSpinner();
         setupSeekBars();
         setupCloudSettings();
         updateBotModeControls();
@@ -333,36 +330,6 @@ public class MainActivity extends Activity {
                 : Math.max(0, Math.min(20, Prefs.getSkill(this)));
         sbSkill.setProgress(progress);
         updateStrengthLabel(progress);
-    }
-
-    private void setupPieceThemeSpinner() {
-        List<PieceThemeStore.Theme> themes = PieceThemeStore.getThemes(this);
-        List<String> labels = new ArrayList<>();
-        List<String> ids = new ArrayList<>();
-        labels.add("Không dùng");
-        ids.add("");
-        for (PieceThemeStore.Theme theme : themes) {
-            labels.add(theme.name);
-            ids.add(theme.id);
-        }
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, labels);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spPieceTheme.setAdapter(adapter);
-        String selected = PieceThemeStore.getSelectedId(this);
-        int position = ids.indexOf(selected);
-        spPieceTheme.setSelection(position < 0 ? 0 : position);
-        spPieceTheme.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int selectedPosition,
-                                       long id) {
-                PieceThemeStore.setSelectedId(MainActivity.this, ids.get(selectedPosition));
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
     }
 
     private void setupEngineSpinner(String selectedId) {
@@ -673,14 +640,12 @@ public class MainActivity extends Activity {
                 "1. Cấp quyền “Nút nổi trên app khác” và “Trợ năng”.\n" +
                 "2. Bấm BẬT NÚT NỔI → cho phép quay màn hình.\n" +
                 "3. Mở app cờ vua, vào một ván mới (phải ở thế cờ bắt đầu).\n" +
-                "4. Giữ nút nổi để mở menu → Căn chỉnh bàn cờ → kéo khung khớp mép bàn cờ → Lưu vùng.\n" +
-                "5. Để train: giữ nút nổi → Train bộ template, đặt tên, chọn Trắng dưới/trên rồi chụp một ảnh khai cuộc. " +
-                "Kiểm tra bàn cờ nhận diện, chạm ô sai để sửa và lưu.\n" +
-                "6. Chọn Stockfish trên máy hoặc Stockfish/Maia-2 cloud. Với cloud, nhập URL và API key của host Python.\n" +
-                "7. Chọn bộ template đã lưu ngay trong menu giữ nút nổi. Bấm ▶ → chọn Trắng/Đen để bắt đầu.\n" +
-                "8. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
+                "4. Giữ nút nổi để căn chỉnh bàn cờ → kéo khung khớp mép bàn cờ → Lưu vùng.\n" +
+                "5. Chọn Stockfish trên máy hoặc Stockfish/Maia-2 cloud. Với cloud, nhập URL và API key của host Python.\n" +
+                "6. Bấm ▶ → chọn Trắng/Đen để bắt đầu; nhận diện quân được học tự động từ thế khai cuộc.\n" +
+                "7. Bot tự đi, chờ đối thủ rồi đi tiếp. Bấm ⏸ để dừng.\n\n" +
                 "Lưu ý: nếu BoardReader không xác nhận được bàn cờ khai cuộc, bot sẽ dừng để tránh đi sai; " +
-                "hãy căn chỉnh lại hoặc train/chọn bộ template. Maia-2 cloud dùng Elo 1100–2000; Maia chạy trên host, chưa chạy " +
+                "hãy căn chỉnh lại. Maia-2 cloud dùng Elo 1100–2000; Maia chạy trên host, chưa chạy " +
                 "cục bộ Android. HTTP chỉ dùng IP LAN riêng; truy cập Internet phải dùng HTTPS. " +
                 "Nếu app hỏi phong cấp, hãy chọn Hậu. Nút nổi nên đặt ngoài vùng bàn cờ.");
     }

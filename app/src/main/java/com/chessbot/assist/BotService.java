@@ -25,8 +25,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
-import com.github.bhlangonijr.chesslib.Board;
-
 /**
  * Foreground service that owns: the floating toggle button, the MediaProjection
  * capture session and the bot loop.
@@ -59,11 +57,6 @@ public class BotService extends Service {
     private boolean prepared;
     private boolean calibrationShowing;
     private View calibrationView;
-    private ToolMenuOverlay toolMenuView;
-    private PieceTrainingOverlay trainingView;
-    private boolean trainingShowing;
-    private boolean trainingBusy;
-    private OpenCvChessRecognizer.Model trainingModel;
     private SidePickerOverlay sidePicker;
     private boolean sidePickerShowing;
     private long generation;
@@ -123,8 +116,6 @@ public class BotService extends Service {
         instance = null;
         stopBot(false);
         closeSidePicker(false);
-        closeToolMenu();
-        closeTraining(false);
         releaseProjection();
         hideFab();
         if (calibrationView != null) {
@@ -225,7 +216,7 @@ public class BotService extends Service {
             showFab();
             updateNotification("Sẵn sàng — nhấn ▶ để chọn màu quân và chạy");
             EventLog.add("Đã bật nút nổi (" + screenW + "×" + screenH + ")");
-            toast("Đã bật nút nổi. Giữ nút để căn chỉnh bàn cờ hoặc train theme.");
+            toast("Đã bật nút nổi. Giữ nút để căn chỉnh bàn cờ.");
         } catch (Throwable t) {
             prepared = false;
             releaseProjection();
@@ -304,7 +295,7 @@ public class BotService extends Service {
             @Override
             public void run() {
                 longFired = true;
-                showToolMenu();
+                showCalibration();
             }
         };
 
@@ -357,241 +348,6 @@ public class BotService extends Service {
                 default:
                     return false;
             }
-        }
-    }
-
-    private void showToolMenu() {
-        if (!prepared || capture == null || toolMenuView != null) {
-            return;
-        }
-        stopBot(true);
-        closeSidePicker(false);
-        hideFab();
-        toolMenuView = new ToolMenuOverlay(this, PieceThemeStore.getThemes(this),
-                Prefs.getPieceThemeId(this), new ToolMenuOverlay.Callback() {
-            @Override
-            public void onCalibrate() {
-                closeToolMenu();
-                showCalibration();
-            }
-
-            @Override
-            public void onTrain() {
-                closeToolMenu();
-                showTraining();
-            }
-
-            @Override
-            public void onSelectTheme(String themeId) {
-                PieceThemeStore.setSelectedId(BotService.this, themeId);
-                Prefs.setPieceThemeId(BotService.this, themeId);
-                for (PieceThemeStore.Theme theme : PieceThemeStore.getThemes(BotService.this)) {
-                    if (theme.id.equals(themeId)) {
-                        EventLog.add("Đã chọn bộ template \"" + theme.name + "\".");
-                        toast("Đã chọn bộ template " + theme.name);
-                        break;
-                    }
-                }
-                closeToolMenu();
-                showFab();
-            }
-
-            @Override
-            public void onClose() {
-                closeToolMenu();
-                showFab();
-            }
-        });
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.TOP | Gravity.START;
-        try {
-            wm.addView(toolMenuView, lp);
-        } catch (Throwable t) {
-            EventLog.add("Không mở được menu nút nổi: " + t);
-            closeToolMenu();
-            showFab();
-        }
-    }
-
-    private void closeToolMenu() {
-        if (toolMenuView != null) {
-            try {
-                wm.removeView(toolMenuView);
-            } catch (Throwable ignored) {
-            }
-            toolMenuView = null;
-        }
-    }
-
-    private void showTraining() {
-        if (!prepared || capture == null) {
-            toast("Hãy bật nút nổi trước khi train");
-            showFab();
-            return;
-        }
-        if (!Prefs.hasCalibration(this)) {
-            toast("Hãy căn chỉnh bàn cờ trước khi train");
-            showCalibration();
-            return;
-        }
-        stopBot(true);
-        hideFab();
-        trainingShowing = true;
-        trainingView = new PieceTrainingOverlay(this, new PieceTrainingOverlay.Callback() {
-            @Override
-            public void onCapture(String themeName, int orientation) {
-                captureOpeningTemplate(themeName, orientation);
-            }
-
-            @Override
-            public void onSave(String themeName, int orientation, int[] correctedBoard) {
-                saveOpeningTemplate(themeName, orientation, correctedBoard);
-            }
-
-            @Override
-            public void onCancel() {
-                closeTraining(true);
-            }
-        });
-        float[] rect = Prefs.getRect(this);
-        float above = rect == null ? 0f : rect[1] * screenH;
-        float below = rect == null ? screenH : (1f - rect[3]) * screenH;
-        int gravity = above >= below ? Gravity.TOP : Gravity.BOTTOM;
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-        lp.gravity = gravity | Gravity.START;
-        try {
-            wm.addView(trainingView, lp);
-            EventLog.add("Tạo bộ template: chụp một ảnh khai cuộc rồi sửa bàn cờ nhận diện.");
-        } catch (Throwable t) {
-            EventLog.add("Không mở được màn hình train: " + t);
-            closeTraining(true);
-        }
-    }
-
-    private void captureOpeningTemplate(String themeName, int orientation) {
-        if (trainingBusy || trainingView == null || capture == null) {
-            return;
-        }
-        trainingBusy = true;
-        trainingView.setBusy(true);
-        final float[] rect = Prefs.getRect(this);
-        if (rect == null) {
-            trainingBusy = false;
-            trainingView.showError("Căn chỉnh bàn cờ trước rồi thử lại.");
-            return;
-        }
-        new Thread(() -> {
-            OpenCvChessRecognizer.Model model = null;
-            OpenCvChessRecognizer.Result result = null;
-            String warning = null;
-            String error = null;
-            try {
-                sleep(350);
-                ScreenCapture.Frame frame = capture == null ? null : capture.grab();
-                if (frame == null) {
-                    throw new IllegalStateException("Không chụp được ảnh màn hình.");
-                } else {
-                    model = OpenCvChessRecognizer.train(frame.pixels, frame.width,
-                            frame.height, rect, orientation);
-                    result = OpenCvChessRecognizer.recognize(frame.pixels, frame.width,
-                            frame.height, rect, orientation, model);
-                    if (!model.occupancyReliable() || result.occupied != 32
-                            || result.unknown > 0) {
-                        warning = "Cảnh báo: occupancy khai cuộc chưa khớp rõ ("
-                                + result.occupied + "/32 quân, " + result.unknown
-                                + " ô chưa rõ). Bạn có thể sửa bàn cờ bên dưới.";
-                    }
-                }
-            } catch (Exception | LinkageError e) {
-                error = "OpenCV không tạo được bộ template: " + e.getMessage();
-                EventLog.add(error);
-            }
-            final String resultError = error;
-            final OpenCvChessRecognizer.Model trainedModel = model;
-            final OpenCvChessRecognizer.Result detected = result;
-            final String resultWarning = warning;
-            handler.post(() -> {
-                trainingBusy = false;
-                if (trainingView == null) {
-                    return;
-                }
-                if (resultError != null) {
-                    trainingView.showError(resultError);
-                    return;
-                }
-                trainingModel = trainedModel;
-                trainingView.showRecognition(detected, resultWarning);
-                EventLog.add("OpenCV nhận diện ảnh train · occupancy " + detected.occupied
-                        + "/32 · ô chưa rõ " + detected.unknown + " · FEN: "
-                        + detected.toFen(true));
-                EventLog.add("Bàn cờ nhận diện:\n" + detected.describe());
-            });
-        }, "piece-theme-sample").start();
-    }
-
-    private void saveOpeningTemplate(String themeName, int orientation, int[] correctedBoard) {
-        if (trainingView == null || trainingModel == null) {
-            if (trainingView != null) {
-                trainingView.showError("Chụp ảnh khai cuộc trước khi lưu.");
-            }
-            return;
-        }
-        int whiteKings = 0;
-        int blackKings = 0;
-        for (int type : correctedBoard) {
-            if (type == OpenCvChessRecognizer.TYPE_UNKNOWN) {
-                trainingView.showError("Sửa các ô ? trước khi lưu.");
-                return;
-            }
-            if (type == 5) whiteKings++;
-            else if (type == 11) blackKings++;
-        }
-        if (whiteKings != 1 || blackKings != 1) {
-            trainingView.showError("Bàn cờ cần có đúng một vua Trắng và một vua Đen.");
-            return;
-        }
-        String fen = OpenCvChessRecognizer.fenFromTypes(correctedBoard, true);
-        try {
-            Board validation = new Board();
-            validation.loadFromFen(fen);
-        } catch (RuntimeException e) {
-            trainingView.showError("FEN không hợp lệ: " + e.getMessage());
-            return;
-        }
-        PieceThemeStore.Theme theme = PieceThemeStore.save(this, themeName,
-                trainingModel.toBytes(), fen, orientation);
-        Prefs.setPieceThemeId(this, theme.id);
-        EventLog.add("Đã lưu và chọn bộ template \"" + theme.name + "\" · hướng a1 "
-                + BoardOrientation.label(orientation) + " · FEN: " + fen);
-        closeTraining(true);
-        toast("Đã lưu bộ template " + theme.name);
-    }
-
-    private void closeTraining(boolean restoreFab) {
-        if (trainingView != null) {
-            try {
-                wm.removeView(trainingView);
-            } catch (Throwable ignored) {
-            }
-            trainingView = null;
-        }
-        trainingShowing = false;
-        trainingBusy = false;
-        trainingModel = null;
-        if (restoreFab && prepared) {
-            showFab();
         }
     }
 
@@ -898,40 +654,53 @@ public class BotService extends Service {
 
     private void verifyCalibrationAsync(Runnable onSuccess) {
         new Thread(() -> {
-            boolean ok = false;
             try {
                 sleep(350); // let the overlay disappear from the capture
                 float[] r = Prefs.getRect(this);
                 if (r == null) {
                     return;
                 }
-                BoardReader.StartRead bestRead = null;
-                int[] previousExact = null;
-                int previousThreshold = -1;
+                BoardReader.Result bestRead = null;
+                int bestMismatch = Integer.MAX_VALUE;
+                int bestFalsePositives = 0;
+                int bestMissedPieces = 0;
                 for (int i = 0; i < 8; i++) {
                     if (capture == null) {
                         break;
                     }
                     ScreenCapture.Frame frame = capture.grab();
                     if (frame != null) {
-                        BoardReader.StartRead read = BoardReader.readStartingPosition(
-                                frame.pixels, frame.width, frame.height,
-                                r[0], r[1], r[2], r[3]);
-                        if (bestRead == null || read.mismatch < bestRead.mismatch) {
-                            bestRead = read;
-                        }
-                        if (read.mismatch == 0) {
-                            int[] current = read.result.screenOccupancy();
-                            if (previousThreshold == read.devThreshold
-                                    && java.util.Arrays.equals(previousExact, current)) {
-                                bestRead = read;
-                                break;
+                        BoardReader.Result read = BoardReader.read(frame.pixels, frame.width,
+                                frame.height, r[0], r[1], r[2], r[3]);
+                        int orientation = Prefs.getOrientation(this) == Prefs.ORIENT_AUTO
+                                ? BoardOrientation.inferFromScreenColors(read.screenColors())
+                                : BoardOrientation.fromPreference(Prefs.getOrientation(this));
+                        int[] observed = read.boardOccupancy(orientation);
+                        int mismatch = 0;
+                        int falsePositives = 0;
+                        int missedPieces = 0;
+                        for (int rank = 0; rank < 8; rank++) {
+                            for (int file = 0; file < 8; file++) {
+                                boolean expected = rank < 2 || rank >= 6;
+                                boolean detected = observed[rank * 8 + file] != 0;
+                                if (expected != detected) {
+                                    mismatch++;
+                                    if (detected) {
+                                        falsePositives++;
+                                    } else {
+                                        missedPieces++;
+                                    }
+                                }
                             }
-                            previousExact = current;
-                            previousThreshold = read.devThreshold;
-                        } else {
-                            previousExact = null;
-                            previousThreshold = -1;
+                        }
+                        if (bestRead == null || mismatch < bestMismatch) {
+                            bestRead = read;
+                            bestMismatch = mismatch;
+                            bestFalsePositives = falsePositives;
+                            bestMissedPieces = missedPieces;
+                        }
+                        if (mismatch == 0) {
+                            break;
                         }
                     }
                     sleep(150);
@@ -940,22 +709,15 @@ public class BotService extends Service {
                     toast("Không chụp được màn hình để kiểm tra");
                     return;
                 }
-                BoardReader.Result res = bestRead.result;
-                String msg;
-                msg = "Nhầm " + bestRead.falsePositives + " ô trống thành có quân, bỏ sót "
-                        + bestRead.missedPieces + " quân; đúng "
-                        + (64 - bestRead.mismatch) + "/64 ô";
-                ok = bestRead.isValid();
-                if (ok) {
-                    Prefs.setBoardThresholds(this, bestRead.devThreshold,
-                            bestRead.fillThreshold);
-                } else {
+                String msg = "Nhầm " + bestFalsePositives
+                        + " ô trống thành có quân, bỏ sót " + bestMissedPieces
+                        + " quân; đúng " + (64 - bestMismatch) + "/64 ô";
+                boolean ok = bestMismatch <= 4;
+                if (!ok) {
                     msg += " — kiểm tra lại crop/hướng bàn cờ; vẫn có thể tiếp tục";
                 }
                 EventLog.add("Kiểm tra hiệu chỉnh: " + msg);
-                EventLog.add("Ngưỡng BoardReader dự phòng: chênh lệch " + bestRead.devThreshold
-                        + " · diện tích " + Math.round(bestRead.fillThreshold * 100) + "%");
-                EventLog.add(res.debugRows());
+                EventLog.add(bestRead.debugRows());
                 final String m = msg;
                 final boolean passed = ok;
                 // On success the side picker itself is the confirmation; a
